@@ -11,6 +11,7 @@ enum Section {
 
 pub enum Instruction {}
 
+#[derive(Debug, PartialEq)]
 pub enum LineType {
     Label { name: String },
 }
@@ -64,8 +65,31 @@ fn parse_label(line: &str) -> Result<LineType, String> {
 
     let line_str = line.to_string();
     return Ok(LineType::Label {
-        name: line_str[1..line_str.len() - 1].to_string(),
+        name: line_str[..line_str.len() - 1].to_string(),
     });
+}
+
+#[cfg(test)]
+mod label_parser_test {
+    use crate::parser::{parse_label, LineType};
+
+    #[test]
+    fn happy() {
+        assert_eq!(
+            parse_label(".test:"),
+            Ok(LineType::Label {
+                name: ".test".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn err() {
+        assert_eq!(
+            parse_label("t e s t:"),
+            Err("invalid label line t e s t:".to_string())
+        );
+    }
 }
 
 fn is_comment(line: &str) -> bool {
@@ -77,4 +101,22 @@ fn is_ignored_line(line: &str) -> bool {
         || is_comment(line)
         || line == ".intel_syntax noprefix"
         || line.starts_with(".global");
+}
+
+#[cfg(test)]
+mod ignored_line_tests {
+    use crate::parser::is_ignored_line;
+
+    #[test]
+    fn ignored_lines() {
+        assert!(is_ignored_line(""));
+        assert!(is_ignored_line("# comment"));
+        assert!(is_ignored_line(".intel_syntax noprefix"));
+        assert!(is_ignored_line(".global main"));
+    }
+    #[test]
+    fn important_lines() {
+        assert!(!is_ignored_line("mov rax, 0"));
+        assert!(!is_ignored_line(".label:"));
+    }
 }

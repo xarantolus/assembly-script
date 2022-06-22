@@ -39,6 +39,14 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Strin
                     current_section = parse_section(line)?
                 }
             } else if current_section == Section::Data {
+                // TODO: Parse data section, especially
+                // .LCharacter: .ascii "a"
+                // .Ltmp64: .byte 0, 0, 0, 0, 0, 0, 0, 0
+                // .LsigStruct:  // <-- This line might be interesting to handle; or I just ignore and compile with --no-matyrdom
+                //     .Lsa_handler: .quad 0
+                //     .quad 0x04000000
+                //     .quad 0, 0
+                // Alternatively just don't parse the data section at all and just allow writing/reading from any label
             }
         }
     }

@@ -9,8 +9,6 @@ enum Section {
     Data,
 }
 
-pub enum Instruction {}
-
 #[derive(Debug, PartialEq)]
 pub enum LineType {
     Label { name: String },

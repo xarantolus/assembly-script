@@ -62,7 +62,7 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Strin
 
 #[cfg(test)]
 mod test_gnu_as_parser {
-    use crate::instructions::{Instruction, RegOrImmediate};
+    use crate::instructions::{Instruction, ValueOperand};
     use crate::{
         parser::{InputFile, LineType},
         registers::Register,
@@ -98,7 +98,7 @@ mod test_gnu_as_parser {
                                 name: "RAX".to_string(),
                                 size: 8
                             },
-                            source: RegOrImmediate::Immediate { i: 0 }
+                            source: ValueOperand::Immediate { i: 0 }
                         }
                     },
                     LineType::Instruction {

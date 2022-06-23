@@ -1,3 +1,5 @@
+use std::{slice::SplitInclusive, vec};
+
 use crate::registers::Register;
 use unescape::unescape;
 
@@ -5,17 +7,17 @@ use unescape::unescape;
 pub enum Instruction {
     MOV {
         destination: Register,
-        source: RegOrImmediate,
+        source: ValueOperand,
     },
 
     IMUL {
         destination: Register,
-        source: RegOrImmediate,
+        source: ValueOperand,
     },
 
     PUSH {
         // The gnu assembler seems to treat `push 1` as pushing a 64-bit value
-        source: RegOrImmediate,
+        source: ValueOperand,
     },
     POP {
         destination: Register,
@@ -23,17 +25,17 @@ pub enum Instruction {
 
     ADD {
         destination: Register,
-        source: RegOrImmediate,
+        source: ValueOperand,
     },
 
     SUB {
         destination: Register,
-        source: RegOrImmediate,
+        source: ValueOperand,
     },
 
     AND {
         destination: Register,
-        source: RegOrImmediate,
+        source: ValueOperand,
     },
 
     XORreg {
@@ -43,7 +45,7 @@ pub enum Instruction {
 
     CMP {
         src1: Register,
-        src2: RegOrImmediate,
+        src2: ValueOperand,
     },
 
     NOTreg {
@@ -52,7 +54,7 @@ pub enum Instruction {
 
     TEST {
         src1: Register,
-        src2: RegOrImmediate,
+        src2: ValueOperand,
     },
 
     JMPlabel {
@@ -83,12 +85,47 @@ pub enum JumpCondition {
     Greater,
 }
 
+fn split_instr_string(line: &str) -> Vec<&str> {
+    // Split the mnemonic from the rest
+    let split = line.split_once(&[' ', '\t']);
+    match split {
+        // Instructions without any whitespace
+        None => vec![line],
+        Some((left, right)) => {
+            let mut res = vec![left];
+            let rest_split: Vec<&str> = right.split(",").collect();
+            res.extend_from_slice(&rest_split);
+            return res
+                .into_iter()
+                .map(|w| w.trim())
+                .filter(|w| !w.is_empty())
+                .collect();
+        }
+    }
+}
+
+#[cfg(test)]
+mod split_test {
+    use super::split_instr_string;
+
+    #[test]
+    fn split() {
+        assert_eq!(
+            split_instr_string("mov rax, rbx"),
+            vec!["mov", "rax", "rbx"]
+        );
+        assert_eq!(
+            split_instr_string("mov byte ptr [rip + offset] , al"),
+            vec!["mov", "byte ptr [rip + offset]", "al"]
+        );
+    }
+}
+
 pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
     // Split e.g. `mov rax, 0` into `"mov", "rax", "0"`
-    let split: Vec<&str> = line
-        .split([' ', ',', '\t'])
-        .filter(|s| !s.is_empty())
-        .collect();
+    // but split `mov byte ptr [rip + offset], 0` into `"mov", "byte ptr [rip + offset]", "0"`
+
+    let split = split_instr_string(line);
 
     let mnem = split[0].to_uppercase();
 
@@ -101,18 +138,16 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
             });
         }
         ("PUSH", 1) => match parse_1_instruction_arg(split)? {
-            RegOrImmediate::Register { r } => {
+            ValueOperand::Register { r } => {
                 if r.size == 1 {
                     Err(format!("PUSH not supported for register {} of size 1", r.name).to_string())
                 } else {
                     Ok(Instruction::PUSH {
-                        source: RegOrImmediate::Register { r: r },
+                        source: ValueOperand::Register { r: r },
                     })
                 }
             }
-            RegOrImmediate::Immediate { i } => Ok(Instruction::PUSH {
-                source: RegOrImmediate::Immediate { i: i },
-            }),
+            o => Ok(Instruction::PUSH { source: o }),
         },
         ("POP", 1) => {
             let dest = Register::parse(split[1].to_string())?;
@@ -204,9 +239,10 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
 }
 
 #[derive(PartialEq, Debug)]
-pub enum RegOrImmediate {
+pub enum ValueOperand {
     Register { r: Register },
     Immediate { i: i64 },
+    Memory { label: String, size: i8 },
 }
 
 fn parse_label(label: String) -> Result<JumpTarget, String> {
@@ -226,7 +262,7 @@ fn parse_label(label: String) -> Result<JumpTarget, String> {
     }
 }
 
-fn parse_2_instruction_args(instruction: Vec<&str>) -> Result<(Register, RegOrImmediate), String> {
+fn parse_2_instruction_args(instruction: Vec<&str>) -> Result<(Register, ValueOperand), String> {
     if instruction.len() != 3 {
         panic!(
             "invalid number of operands: got {}, expected 3",
@@ -237,7 +273,7 @@ fn parse_2_instruction_args(instruction: Vec<&str>) -> Result<(Register, RegOrIm
             Ok(reg1) => match Register::parse(instruction[2].to_string()) {
                 Ok(reg2) => {
                     if reg1.size == reg2.size {
-                        Ok((reg1, RegOrImmediate::Register { r: reg2 }))
+                        Ok((reg1, ValueOperand::Register { r: reg2 }))
                     } else {
                         Err(format!("invalid use of registers {} and {} of different size in {} instruction", reg1.name, reg2.name,                         instruction[0].to_uppercase()).to_string())
                     }
@@ -245,7 +281,7 @@ fn parse_2_instruction_args(instruction: Vec<&str>) -> Result<(Register, RegOrIm
                 _ => Ok((
                     // TODO: Check if immediate is too large for destination
                     reg1,
-                    RegOrImmediate::Immediate {
+                    ValueOperand::Immediate {
                         i: parse_immediate_arg(instruction[2])?,
                     },
                 )),
@@ -259,7 +295,7 @@ fn parse_2_instruction_args(instruction: Vec<&str>) -> Result<(Register, RegOrIm
     }
 }
 
-fn parse_1_instruction_arg(instruction: Vec<&str>) -> Result<RegOrImmediate, String> {
+fn parse_1_instruction_arg(instruction: Vec<&str>) -> Result<ValueOperand, String> {
     if instruction.len() != 2 {
         panic!(
             "invalid number of operands: got {}, expected 2",
@@ -267,10 +303,10 @@ fn parse_1_instruction_arg(instruction: Vec<&str>) -> Result<RegOrImmediate, Str
         );
     } else {
         match Register::parse(instruction[1].to_string()) {
-            Ok(reg) => Ok(RegOrImmediate::Register { r: reg }),
+            Ok(reg) => Ok(ValueOperand::Register { r: reg }),
             _ => Ok(
                 // TODO: Check if immediate is too large for destination
-                RegOrImmediate::Immediate {
+                ValueOperand::Immediate {
                     i: parse_immediate_arg(instruction[2])?,
                 },
             ),
@@ -281,11 +317,26 @@ fn parse_1_instruction_arg(instruction: Vec<&str>) -> Result<RegOrImmediate, Str
 #[cfg(test)]
 mod instruction_parse_test {
     use crate::{
-        instructions::{parse_instruction, Instruction, JumpTarget, RegOrImmediate},
+        instructions::{parse_instruction, Instruction, JumpTarget, ValueOperand},
         registers::Register,
     };
 
     use super::JumpCondition;
+
+    #[test]
+    fn mov_memory() {
+        assert_eq!(
+            parse_instruction("mov al, BYTE PTR [rip + .LCharacter]"),
+            // TODO
+            todo!() // Ok(Instruction::MOV {
+                    //     destination: Register {
+                    //         name: "RAX".to_string(),
+                    //         size: 8
+                    //     },
+                    //     source: ValueOperand::Immediate { i: 53 },
+                    // })
+        );
+    }
 
     #[test]
     fn mov_immediate() {
@@ -296,7 +347,7 @@ mod instruction_parse_test {
                     name: "RAX".to_string(),
                     size: 8
                 },
-                source: RegOrImmediate::Immediate { i: 53 },
+                source: ValueOperand::Immediate { i: 53 },
             })
         );
         assert_eq!(
@@ -306,7 +357,7 @@ mod instruction_parse_test {
                     name: "EAX".to_string(),
                     size: 4
                 },
-                source: RegOrImmediate::Immediate { i: 53 },
+                source: ValueOperand::Immediate { i: 53 },
             })
         );
         assert_eq!(
@@ -316,7 +367,7 @@ mod instruction_parse_test {
                     name: "AL".to_string(),
                     size: 1
                 },
-                source: RegOrImmediate::Immediate { i: 122 },
+                source: ValueOperand::Immediate { i: 122 },
             })
         );
         assert_eq!(
@@ -326,7 +377,7 @@ mod instruction_parse_test {
                     name: "AL".to_string(),
                     size: 1
                 },
-                source: RegOrImmediate::Immediate { i: 10 },
+                source: ValueOperand::Immediate { i: 10 },
             })
         );
         assert_eq!(
@@ -336,7 +387,7 @@ mod instruction_parse_test {
                     name: "AL".to_string(),
                     size: 1
                 },
-                source: RegOrImmediate::Immediate { i: 9 },
+                source: ValueOperand::Immediate { i: 9 },
             })
         );
     }
@@ -350,7 +401,7 @@ mod instruction_parse_test {
                     name: "RDI".to_string(),
                     size: 8
                 },
-                source: RegOrImmediate::Register {
+                source: ValueOperand::Register {
                     r: Register {
                         name: "RAX".to_string(),
                         size: 8
@@ -369,7 +420,7 @@ mod instruction_parse_test {
                     name: "RAX".to_string(),
                     size: 8
                 },
-                source: RegOrImmediate::Register {
+                source: ValueOperand::Register {
                     r: Register {
                         name: "RBX".to_string(),
                         size: 8
@@ -384,7 +435,7 @@ mod instruction_parse_test {
                     name: "RAX".to_string(),
                     size: 8
                 },
-                source: RegOrImmediate::Immediate { i: 52 }
+                source: ValueOperand::Immediate { i: 52 }
             })
         );
     }
@@ -394,7 +445,7 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("push rbx"),
             Ok(Instruction::PUSH {
-                source: RegOrImmediate::Register {
+                source: ValueOperand::Register {
                     r: Register {
                         name: "RBX".to_string(),
                         size: 8
@@ -405,7 +456,7 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("push r8d"),
             Ok(Instruction::PUSH {
-                source: RegOrImmediate::Register {
+                source: ValueOperand::Register {
                     r: Register {
                         name: "R8D".to_string(),
                         size: 4
@@ -416,7 +467,7 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("push sp"),
             Ok(Instruction::PUSH {
-                source: RegOrImmediate::Register {
+                source: ValueOperand::Register {
                     r: Register {
                         name: "SP".to_string(),
                         size: 2
@@ -474,7 +525,7 @@ mod instruction_parse_test {
                     name: "RAX".to_string(),
                     size: 8
                 },
-                source: RegOrImmediate::Immediate { i: 53 },
+                source: ValueOperand::Immediate { i: 53 },
             })
         );
         assert_eq!(
@@ -484,7 +535,7 @@ mod instruction_parse_test {
                     name: "EAX".to_string(),
                     size: 4
                 },
-                source: RegOrImmediate::Immediate { i: 53 },
+                source: ValueOperand::Immediate { i: 53 },
             })
         );
         assert_eq!(
@@ -494,7 +545,7 @@ mod instruction_parse_test {
                     name: "AL".to_string(),
                     size: 1
                 },
-                source: RegOrImmediate::Immediate { i: 122 },
+                source: ValueOperand::Immediate { i: 122 },
             })
         );
         assert_eq!(
@@ -504,7 +555,7 @@ mod instruction_parse_test {
                     name: "AL".to_string(),
                     size: 1
                 },
-                source: RegOrImmediate::Immediate { i: 10 },
+                source: ValueOperand::Immediate { i: 10 },
             })
         );
         assert_eq!(
@@ -514,7 +565,7 @@ mod instruction_parse_test {
                     name: "AL".to_string(),
                     size: 1
                 },
-                source: RegOrImmediate::Immediate { i: 9 },
+                source: ValueOperand::Immediate { i: 9 },
             })
         );
     }
@@ -541,7 +592,7 @@ mod instruction_parse_test {
                     name: "RSP".to_string(),
                     size: 8
                 },
-                src2: RegOrImmediate::Immediate { i: 0xf }
+                src2: ValueOperand::Immediate { i: 0xf }
             })
         )
     }
@@ -555,7 +606,7 @@ mod instruction_parse_test {
                     name: "RSP".to_string(),
                     size: 8
                 },
-                source: RegOrImmediate::Immediate { i: 8 }
+                source: ValueOperand::Immediate { i: 8 }
             })
         );
         assert_eq!(
@@ -565,7 +616,7 @@ mod instruction_parse_test {
                     name: "RSP".to_string(),
                     size: 8
                 },
-                source: RegOrImmediate::Register {
+                source: ValueOperand::Register {
                     r: Register {
                         name: "RBX".to_string(),
                         size: 8
@@ -719,5 +770,32 @@ fn parse_as_char_constant(nstr: &str) -> Result<i64, String> {
             }
         }
         None => Err(format!("char unescape not possible for {nstr}")),
+    }
+}
+
+fn parse_as_memory_operand(nstr: &str) -> Result<ValueOperand, String> {
+    Err("unimplemented".to_string())
+}
+
+#[cfg(test)]
+mod memory_operands {
+    use super::{parse_as_memory_operand, ValueOperand};
+
+    #[test]
+    fn parse_mem_operands() {
+        assert_eq!(
+            parse_as_memory_operand("BYTE PTR [rip + .LCharacter]"),
+            Ok(ValueOperand::Memory {
+                label: ".LCharacter".to_string(),
+                size: 1
+            })
+        );
+        assert_eq!(
+            parse_as_memory_operand("QWORD PTR [rip + .Ltmp64]"),
+            Ok(ValueOperand::Memory {
+                label: ".Ltmp64".to_string(),
+                size: 8
+            })
+        )
     }
 }

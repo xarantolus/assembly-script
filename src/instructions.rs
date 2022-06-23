@@ -1,14 +1,81 @@
+use std::fmt::format;
+
 use crate::registers::Register;
 use unescape::unescape;
 
 #[derive(PartialEq, Debug)]
 pub enum Instruction {
-    MOVimm { destination: Register, operand: i64 },
+    MOVreg {
+        destination: Register,
+        source: Register,
+    },
+    MOVimm {
+        destination: Register,
+        operand: i64,
+    },
 
-    PUSHreg { destination: Register },
-    POPreg { destination: Register },
+    PUSHreg {
+        source: Register,
+    },
+    POPreg {
+        destination: Register,
+    },
 
-    ADDimm { destination: Register, operand: i64 },
+    // The gnu assembler seems to treat `push 1` as pushing a 64-bit value
+    PUSHimm {
+        source: i64,
+    },
+
+    ADDimm {
+        destination: Register,
+        operand: i64,
+    },
+    ADDreg {
+        destination: Register,
+        source: Register,
+    },
+
+    SUBimm {
+        destination: Register,
+        operand: i64,
+    },
+    SUBreg {
+        destination: Register,
+        source: Register,
+    },
+
+    ANDimm {
+        destination: Register,
+        operand: i64,
+    },
+    ANDreg {
+        destination: Register,
+        source: Register,
+    },
+
+    CMPreg {
+        src1: Register,
+        src2: Register,
+    },
+    CMPimm {
+        src1: Register,
+        operand: i64,
+    },
+
+    NOTreg {
+        destination: Register,
+    },
+
+    TESTreg {
+        src1: Register,
+        src2: Register,
+    },
+    TESTimm {
+        src1: Register,
+        operand: i64,
+    },
+
+    // TODO: call label, ret, jmp, jl jg jz, syscall, lea
 }
 
 fn parse_instruction(line: &str) -> Result<Instruction, String> {
@@ -18,21 +85,24 @@ fn parse_instruction(line: &str) -> Result<Instruction, String> {
         .filter(|s| !s.is_empty())
         .collect();
 
-    let mem = split[0].to_uppercase();
+    let mnem = split[0].to_uppercase();
 
-    match (mem.as_str(), split.len() - 1) {
+    match (mnem.as_str(), split.len() - 1) {
         ("MOV", 2) => Ok(Instruction::MOVimm {
             destination: Register::parse(split[1].to_string())?,
             operand: parse_immediate_arg(split[2])?,
         }),
-        ("PUSH", 1) => {
-            let src = Register::parse(split[1].to_string())?;
-            if src.size == 1 {
-                Err(format!("PUSH not supported for register {} of size 1", src.name).to_string())
-            } else {
-                Ok(Instruction::PUSHreg { destination: src })
+        ("PUSH", 1) => match parse_1_instruction_arg(split)? {
+            RegOrImmediate::Register { r } => {
+                if r.size == 1 {
+                    Err(format!("PUSH not supported for register {} of size 1", r.name).to_string())
+                } else {
+                    Ok(Instruction::PUSHreg { source: r })
+                }
             }
-        }
+            // If it's not a register, it could be an immediate value
+            RegOrImmediate::Immediate { i } => Ok(Instruction::PUSHimm { source: i }),
+        },
         ("POP", 1) => {
             let dest = Register::parse(split[1].to_string())?;
             if dest.size == 1 {
@@ -41,11 +111,117 @@ fn parse_instruction(line: &str) -> Result<Instruction, String> {
                 Ok(Instruction::POPreg { destination: dest })
             }
         }
-        ("ADD", 2) => Ok(Instruction::ADDimm {
+        ("NOT", 1) => Ok(Instruction::NOTreg {
             destination: Register::parse(split[1].to_string())?,
-            operand: parse_immediate_arg(split[2])?,
         }),
+        ("ADD", 2) => match parse_2_instruction_args(split)? {
+            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::ADDreg {
+                destination: reg1,
+                source: reg2,
+            }),
+            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::ADDimm {
+                destination: reg1,
+                operand: i,
+            }),
+        },
+        ("SUB", 2) => match parse_2_instruction_args(split)? {
+            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::SUBreg {
+                destination: reg1,
+                source: reg2,
+            }),
+            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::SUBimm {
+                destination: reg1,
+                operand: i,
+            }),
+        },
+        ("AND", 2) => match parse_2_instruction_args(split)? {
+            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::ANDreg {
+                destination: reg1,
+                source: reg2,
+            }),
+            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::ANDimm {
+                destination: reg1,
+                operand: i,
+            }),
+        },
+        ("CMP", 2) => match parse_2_instruction_args(split)? {
+            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::CMPreg {
+                src1: reg1,
+                src2: reg2,
+            }),
+            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::CMPimm {
+                src1: reg1,
+                operand: i,
+            }),
+        },
+        ("TEST", 2) => match parse_2_instruction_args(split)? {
+            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::TESTreg {
+                src1: reg1,
+                src2: reg2,
+            }),
+            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::TESTimm {
+                src1: reg1,
+                operand: i,
+            }),
+        },
         _ => Err(format!("Cannot parse instruction {}", line).to_string()),
+    }
+}
+
+enum RegOrImmediate {
+    Register { r: Register },
+    Immediate { i: i64 },
+}
+
+fn parse_2_instruction_args(instruction: Vec<&str>) -> Result<(Register, RegOrImmediate), String> {
+    if instruction.len() != 3 {
+        panic!(
+            "invalid number of operands: got {}, expected 3",
+            instruction.len()
+        );
+    } else {
+        match Register::parse(instruction[1].to_string()) {
+            Ok(reg1) => match Register::parse(instruction[2].to_string()) {
+                Ok(reg2) => {
+                    if reg1.size == reg2.size {
+                        Ok((reg1, RegOrImmediate::Register { r: reg2 }))
+                    } else {
+                        Err(format!("invalid use of registers {} and {} of different size in {} instruction", reg1.name, reg2.name,                         instruction[0].to_uppercase()).to_string())
+                    }
+                }
+                _ => Ok((
+                    // TODO: Check if immediate is too large for destination
+                    reg1,
+                    RegOrImmediate::Immediate {
+                        i: parse_immediate_arg(instruction[2])?,
+                    },
+                )),
+            },
+            _ => Err(format!(
+                "invalid first operand {} for {} instruction",
+                instruction[1],
+                instruction[0].to_uppercase()
+            )),
+        }
+    }
+}
+
+fn parse_1_instruction_arg(instruction: Vec<&str>) -> Result<RegOrImmediate, String> {
+    if instruction.len() != 2 {
+        panic!(
+            "invalid number of operands: got {}, expected 2",
+            instruction.len()
+        );
+    } else {
+        match Register::parse(instruction[1].to_string()) {
+            Ok(reg) => Ok(RegOrImmediate::Register { r: reg }),
+            _ => Ok(
+                // TODO: Check if immediate is too large for destination
+                RegOrImmediate::Immediate {
+                    i: parse_immediate_arg(instruction[2])?,
+                },
+            ),
+        }
     }
 }
 
@@ -115,7 +291,7 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("push rbx"),
             Ok(Instruction::PUSHreg {
-                destination: Register {
+                source: Register {
                     name: "RBX".to_string(),
                     size: 8
                 },
@@ -124,7 +300,7 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("push r8d"),
             Ok(Instruction::PUSHreg {
-                destination: Register {
+                source: Register {
                     name: "R8D".to_string(),
                     size: 4
                 },
@@ -133,7 +309,7 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("push sp"),
             Ok(Instruction::PUSHreg {
-                destination: Register {
+                source: Register {
                     name: "SP".to_string(),
                     size: 2
                 },
@@ -233,12 +409,82 @@ mod instruction_parse_test {
             })
         );
     }
+
+    #[test]
+    fn not_register() {
+        assert_eq!(
+            parse_instruction("not rbx"),
+            Ok(Instruction::NOTreg {
+                destination: Register {
+                    name: "RBX".to_string(),
+                    size: 8
+                },
+            })
+        );
+    }
+
+    #[test]
+    fn test_immediate() {
+        assert_eq!(
+            parse_instruction("test rsp, 0xF"),
+            Ok(Instruction::TESTimm {
+                src1: Register {
+                    name: "RSP".to_string(),
+                    size: 8
+                },
+                operand: 0xf
+            })
+        )
+    }
+
+    #[test]
+    fn sub() {
+        assert_eq!(
+            parse_instruction("sub rsp, 8"),
+            Ok(Instruction::SUBimm {
+                destination: Register {
+                    name: "RSP".to_string(),
+                    size: 8
+                },
+                operand: 8
+            })
+        );
+        assert_eq!(
+            parse_instruction("sub rsp, rbx"),
+            Ok(Instruction::SUBreg {
+                destination: Register {
+                    name: "RSP".to_string(),
+                    size: 8
+                },
+                source: Register {
+                    name: "RBX".to_string(),
+                    size: 8
+                },
+            })
+        );
+        assert_eq!(
+            parse_instruction("sub rsp, ebx"),
+            Err(
+                "invalid use of registers RSP and EBX of different size in SUB instruction"
+                    .to_string()
+            )
+        );
+    }
 }
 
 fn parse_immediate_arg(nstr: &str) -> Result<i64, String> {
     match i64::from_str_radix(nstr, 10) {
         Ok(i) => Ok(i),
-        _ => parse_as_char_constant(nstr),
+        _ => {
+            if nstr.starts_with("0x") {
+                match i64::from_str_radix(&nstr[2..], 16) {
+                    Ok(i) => Ok(i),
+                    _ => Err(format!("invalid integer constant {}", nstr).to_string()),
+                }
+            } else {
+                parse_as_char_constant(nstr)
+            }
+        }
     }
 }
 

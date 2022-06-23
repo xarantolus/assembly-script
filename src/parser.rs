@@ -1,3 +1,6 @@
+use crate::instructions::{parse_instruction, Instruction};
+
+#[derive(PartialEq, Debug)]
 pub struct InputFile {
     pub parsed_lines: Vec<LineType>,
 }
@@ -12,6 +15,7 @@ enum Section {
 #[derive(Debug, PartialEq)]
 pub enum LineType {
     Label { name: String },
+    Instruction { i: Instruction },
 }
 
 pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, String> {
@@ -27,35 +31,90 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Strin
             continue;
         }
 
-        if current_section == Section::Data || current_section == Section::None {
-
-        }
-
         if line.starts_with(".") {
-            if line.split_whitespace().count() == 1 {
-                if line.ends_with(":") {
-                    // Look for labels like "function_name:"
-                    parsed_lines.push(parse_label(line)?)
-                } else {
-                    // Look for stuff like `.data` and `.text`
-                    current_section = parse_section(line)?
-                }
-            } else  {
-                // TODO: Parse data section, especially
-                // .LCharacter: .ascii "a"
-                // .Ltmp64: .byte 0, 0, 0, 0, 0, 0, 0, 0
-                // .LsigStruct:  // <-- This line might be interesting to handle; or I just ignore and compile with --no-matyrdom
-                //     .Lsa_handler: .quad 0
-                //     .quad 0x04000000
-                //     .quad 0, 0
-                // Alternatively just don't parse the data section at all and just allow writing/reading from any label
+            let section_line = parse_section(line);
+            if section_line.is_ok() {
+                current_section = section_line.ok().unwrap();
+                continue;
             }
         }
+
+        if current_section == Section::Data || current_section == Section::None {
+            continue;
+        }
+
+        // Look for labels like "function_name:"
+        if line.ends_with(":") && line.split_whitespace().count() == 1 {
+            parsed_lines.push(parse_label(line)?);
+            continue;
+        }
+
+        let next_instruction = parse_instruction(line)?;
+        parsed_lines.push(LineType::Instruction {
+            i: next_instruction,
+        })
     }
 
     Ok(InputFile {
         parsed_lines: parsed_lines,
     })
+}
+
+#[cfg(test)]
+mod test_gnu_as_parser {
+    use crate::instructions::Instruction;
+    use crate::{
+        parser::{InputFile, LineType},
+        registers::Register,
+    };
+
+    use super::parse_gnu_as_input;
+
+    #[test]
+    fn simple() {
+        let res = parse_gnu_as_input(
+            r#"
+        .text
+        label:
+        mov rax, 0
+        ret
+        "#
+            .to_string(),
+        );
+        assert!(res.is_ok());
+
+        let parsed = res.ok().unwrap();
+
+        assert_eq!(
+            parsed,
+            InputFile {
+                parsed_lines: vec![
+                    LineType::Label {
+                        name: "label".to_string()
+                    },
+                    LineType::Instruction {
+                        i: Instruction::MOVimm {
+                            destination: Register {
+                                name: "RAX".to_string(),
+                                size: 8
+                            },
+                            operand: 0
+                        }
+                    },
+                    LineType::Instruction {
+                        i: Instruction::RET {}
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn alphabet() {
+        let alphabet_assembly = include_str!("testdata/alphabet.S");
+        let result = parse_gnu_as_input(alphabet_assembly.to_string());
+        assert!(result.is_ok(), "{}", result.err().unwrap());
+    }
 }
 
 fn parse_section(line: &str) -> Result<Section, String> {

@@ -75,7 +75,24 @@ pub enum Instruction {
         operand: i64,
     },
 
+    JMPlabel {
+        target: JumpTarget,
+        condition: JumpCondition,
+    },
     // TODO: call label, ret, jmp, jl jg jz, syscall, lea
+}
+
+#[derive(PartialEq, Debug)]
+pub enum JumpTarget {
+    Relative { forwards: bool, label: String },
+    Absolute { label: String },
+}
+
+#[derive(PartialEq, Debug)]
+pub enum JumpCondition {
+    None,
+    Zero,
+    Less,
 }
 
 fn parse_instruction(line: &str) -> Result<Instruction, String> {
@@ -228,9 +245,11 @@ fn parse_1_instruction_arg(instruction: Vec<&str>) -> Result<RegOrImmediate, Str
 #[cfg(test)]
 mod instruction_parse_test {
     use crate::{
-        instructions::{parse_instruction, Instruction},
+        instructions::{parse_instruction, Instruction, JumpTarget},
         registers::Register,
     };
+
+    use super::JumpCondition;
 
     #[test]
     fn mov_immediate() {
@@ -469,6 +488,39 @@ mod instruction_parse_test {
                     .to_string()
             )
         );
+    }
+
+    #[test]
+    fn jump_test() {
+        assert_eq!(
+            parse_instruction("jmp .LeaxWins_0"),
+            Ok(Instruction::JMPlabel {
+                target: JumpTarget::Absolute {
+                    label: ".LeaxWins_0".to_string()
+                },
+                condition: JumpCondition::None
+            }),
+        );
+        assert_eq!(
+            parse_instruction("jmp 2f"),
+            Ok(Instruction::JMPlabel {
+                target: JumpTarget::Relative {
+                    forwards: true,
+                    label: "2".to_string()
+                },
+                condition: JumpCondition::None
+            }),
+        );
+        assert_eq!(
+            parse_instruction("jmp 1b"),
+            Ok(Instruction::JMPlabel {
+                target: JumpTarget::Relative {
+                    forwards: false,
+                    label: "2".to_string()
+                },
+                condition: JumpCondition::None
+            }),
+        )
     }
 }
 

@@ -3,13 +3,9 @@ use unescape::unescape;
 
 #[derive(PartialEq, Debug)]
 pub enum Instruction {
-    MOVreg {
+    MOV {
         destination: Register,
-        source: Register,
-    },
-    MOVimm {
-        destination: Register,
-        operand: i64,
+        source: RegOrImmediate,
     },
 
     IMUL {
@@ -17,43 +13,27 @@ pub enum Instruction {
         source: RegOrImmediate,
     },
 
-    PUSHreg {
-        source: Register,
+    PUSH {
+        // The gnu assembler seems to treat `push 1` as pushing a 64-bit value
+        source: RegOrImmediate,
     },
-    POPreg {
+    POP {
         destination: Register,
     },
 
-    // The gnu assembler seems to treat `push 1` as pushing a 64-bit value
-    PUSHimm {
-        source: i64,
+    ADD {
+        destination: Register,
+        source: RegOrImmediate,
     },
 
-    ADDimm {
+    SUB {
         destination: Register,
-        operand: i64,
-    },
-    ADDreg {
-        destination: Register,
-        source: Register,
+        source: RegOrImmediate,
     },
 
-    SUBimm {
+    AND {
         destination: Register,
-        operand: i64,
-    },
-    SUBreg {
-        destination: Register,
-        source: Register,
-    },
-
-    ANDimm {
-        destination: Register,
-        operand: i64,
-    },
-    ANDreg {
-        destination: Register,
-        source: Register,
+        source: RegOrImmediate,
     },
 
     XORreg {
@@ -61,26 +41,18 @@ pub enum Instruction {
         source: Register,
     },
 
-    CMPreg {
+    CMP {
         src1: Register,
-        src2: Register,
-    },
-    CMPimm {
-        src1: Register,
-        operand: i64,
+        src2: RegOrImmediate,
     },
 
     NOTreg {
         destination: Register,
     },
 
-    TESTreg {
+    TEST {
         src1: Register,
-        src2: Register,
-    },
-    TESTimm {
-        src1: Register,
-        operand: i64,
+        src2: RegOrImmediate,
     },
 
     JMPlabel {
@@ -121,33 +93,33 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
     let mnem = split[0].to_uppercase();
 
     match (mnem.as_str(), split.len() - 1) {
-        ("MOV", 2) => match parse_2_instruction_args(split)? {
-            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::MOVreg {
-                destination: reg1,
-                source: reg2,
-            }),
-            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::MOVimm {
-                destination: reg1,
-                operand: i,
-            }),
-        },
+        ("MOV", 2) => {
+            let (dest, src) = parse_2_instruction_args(split)?;
+            return Ok(Instruction::MOV {
+                destination: dest,
+                source: src,
+            });
+        }
         ("PUSH", 1) => match parse_1_instruction_arg(split)? {
             RegOrImmediate::Register { r } => {
                 if r.size == 1 {
                     Err(format!("PUSH not supported for register {} of size 1", r.name).to_string())
                 } else {
-                    Ok(Instruction::PUSHreg { source: r })
+                    Ok(Instruction::PUSH {
+                        source: RegOrImmediate::Register { r: r },
+                    })
                 }
             }
-            // If it's not a register, it could be an immediate value
-            RegOrImmediate::Immediate { i } => Ok(Instruction::PUSHimm { source: i }),
+            RegOrImmediate::Immediate { i } => Ok(Instruction::PUSH {
+                source: RegOrImmediate::Immediate { i: i },
+            }),
         },
         ("POP", 1) => {
             let dest = Register::parse(split[1].to_string())?;
             if dest.size == 1 {
                 Err(format!("POP not supported for register {} of size 1", dest.name).to_string())
             } else {
-                Ok(Instruction::POPreg { destination: dest })
+                Ok(Instruction::POP { destination: dest })
             }
         }
         ("NOT", 1) => Ok(Instruction::NOTreg {
@@ -192,56 +164,41 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
                 source: reg_or_imm,
             })
         }
-        ("ADD", 2) => match parse_2_instruction_args(split)? {
-            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::ADDreg {
-                destination: reg1,
-                source: reg2,
-            }),
-            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::ADDimm {
-                destination: reg1,
-                operand: i,
-            }),
-        },
-        ("SUB", 2) => match parse_2_instruction_args(split)? {
-            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::SUBreg {
-                destination: reg1,
-                source: reg2,
-            }),
-            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::SUBimm {
-                destination: reg1,
-                operand: i,
-            }),
-        },
-        ("AND", 2) => match parse_2_instruction_args(split)? {
-            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::ANDreg {
-                destination: reg1,
-                source: reg2,
-            }),
-            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::ANDimm {
-                destination: reg1,
-                operand: i,
-            }),
-        },
-        ("CMP", 2) => match parse_2_instruction_args(split)? {
-            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::CMPreg {
-                src1: reg1,
-                src2: reg2,
-            }),
-            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::CMPimm {
-                src1: reg1,
-                operand: i,
-            }),
-        },
-        ("TEST", 2) => match parse_2_instruction_args(split)? {
-            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::TESTreg {
-                src1: reg1,
-                src2: reg2,
-            }),
-            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::TESTimm {
-                src1: reg1,
-                operand: i,
-            }),
-        },
+        ("ADD", 2) => {
+            let (dest, src) = parse_2_instruction_args(split)?;
+            Ok(Instruction::ADD {
+                destination: dest,
+                source: src,
+            })
+        }
+        ("SUB", 2) => {
+            let (dest, src) = parse_2_instruction_args(split)?;
+            Ok(Instruction::SUB {
+                destination: dest,
+                source: src,
+            })
+        }
+        ("AND", 2) => {
+            let (dest, src) = parse_2_instruction_args(split)?;
+            Ok(Instruction::AND {
+                destination: dest,
+                source: src,
+            })
+        }
+        ("CMP", 2) => {
+            let (src1, src2) = parse_2_instruction_args(split)?;
+            Ok(Instruction::CMP {
+                src1: src1,
+                src2: src2,
+            })
+        }
+        ("TEST", 2) => {
+            let (src1, src2) = parse_2_instruction_args(split)?;
+            Ok(Instruction::TEST {
+                src1: src1,
+                src2: src2,
+            })
+        }
         _ => Err(format!("Cannot parse instruction {}", line).to_string()),
     }
 }
@@ -334,52 +291,52 @@ mod instruction_parse_test {
     fn mov_immediate() {
         assert_eq!(
             parse_instruction("mov rax, 53"),
-            Ok(Instruction::MOVimm {
+            Ok(Instruction::MOV {
                 destination: Register {
                     name: "RAX".to_string(),
                     size: 8
                 },
-                operand: 53,
+                source: RegOrImmediate::Immediate { i: 53 },
             })
         );
         assert_eq!(
             parse_instruction("mov  eAx, 53"),
-            Ok(Instruction::MOVimm {
+            Ok(Instruction::MOV {
                 destination: Register {
                     name: "EAX".to_string(),
                     size: 4
                 },
-                operand: 53,
+                source: RegOrImmediate::Immediate { i: 53 },
             })
         );
         assert_eq!(
             parse_instruction("mov  al, 'z'"),
-            Ok(Instruction::MOVimm {
+            Ok(Instruction::MOV {
                 destination: Register {
                     name: "AL".to_string(),
                     size: 1
                 },
-                operand: 122,
+                source: RegOrImmediate::Immediate { i: 122 },
             })
         );
         assert_eq!(
             parse_instruction(r#"mov  al, '\n'"#),
-            Ok(Instruction::MOVimm {
+            Ok(Instruction::MOV {
                 destination: Register {
                     name: "AL".to_string(),
                     size: 1
                 },
-                operand: 10,
+                source: RegOrImmediate::Immediate { i: 10 },
             })
         );
         assert_eq!(
             parse_instruction(r#"mov  al, '\t'"#),
-            Ok(Instruction::MOVimm {
+            Ok(Instruction::MOV {
                 destination: Register {
                     name: "AL".to_string(),
                     size: 1
                 },
-                operand: 9,
+                source: RegOrImmediate::Immediate { i: 9 },
             })
         );
     }
@@ -388,14 +345,16 @@ mod instruction_parse_test {
     fn mov_register() {
         assert_eq!(
             parse_instruction("mov rdi, rax"),
-            Ok(Instruction::MOVreg {
+            Ok(Instruction::MOV {
                 destination: Register {
                     name: "RDI".to_string(),
                     size: 8
                 },
-                source: Register {
-                    name: "RAX".to_string(),
-                    size: 8
+                source: RegOrImmediate::Register {
+                    r: Register {
+                        name: "RAX".to_string(),
+                        size: 8
+                    }
                 }
             })
         )
@@ -434,29 +393,35 @@ mod instruction_parse_test {
     fn push_register() {
         assert_eq!(
             parse_instruction("push rbx"),
-            Ok(Instruction::PUSHreg {
-                source: Register {
-                    name: "RBX".to_string(),
-                    size: 8
-                },
+            Ok(Instruction::PUSH {
+                source: RegOrImmediate::Register {
+                    r: Register {
+                        name: "RBX".to_string(),
+                        size: 8
+                    },
+                }
             })
         );
         assert_eq!(
             parse_instruction("push r8d"),
-            Ok(Instruction::PUSHreg {
-                source: Register {
-                    name: "R8D".to_string(),
-                    size: 4
-                },
+            Ok(Instruction::PUSH {
+                source: RegOrImmediate::Register {
+                    r: Register {
+                        name: "R8D".to_string(),
+                        size: 4
+                    },
+                }
             })
         );
         assert_eq!(
             parse_instruction("push sp"),
-            Ok(Instruction::PUSHreg {
-                source: Register {
-                    name: "SP".to_string(),
-                    size: 2
-                },
+            Ok(Instruction::PUSH {
+                source: RegOrImmediate::Register {
+                    r: Register {
+                        name: "SP".to_string(),
+                        size: 2
+                    },
+                }
             })
         );
         assert_eq!(
@@ -469,7 +434,7 @@ mod instruction_parse_test {
     fn pop_register() {
         assert_eq!(
             parse_instruction("pop rbx"),
-            Ok(Instruction::POPreg {
+            Ok(Instruction::POP {
                 destination: Register {
                     name: "RBX".to_string(),
                     size: 8
@@ -478,7 +443,7 @@ mod instruction_parse_test {
         );
         assert_eq!(
             parse_instruction("pop r8d"),
-            Ok(Instruction::POPreg {
+            Ok(Instruction::POP {
                 destination: Register {
                     name: "R8D".to_string(),
                     size: 4
@@ -487,7 +452,7 @@ mod instruction_parse_test {
         );
         assert_eq!(
             parse_instruction("pop sp"),
-            Ok(Instruction::POPreg {
+            Ok(Instruction::POP {
                 destination: Register {
                     name: "SP".to_string(),
                     size: 2
@@ -504,52 +469,52 @@ mod instruction_parse_test {
     fn add_immediate() {
         assert_eq!(
             parse_instruction("add rax, 53"),
-            Ok(Instruction::ADDimm {
+            Ok(Instruction::ADD {
                 destination: Register {
                     name: "RAX".to_string(),
                     size: 8
                 },
-                operand: 53,
+                source: RegOrImmediate::Immediate { i: 53 },
             })
         );
         assert_eq!(
             parse_instruction("add  eAx, 53"),
-            Ok(Instruction::ADDimm {
+            Ok(Instruction::ADD {
                 destination: Register {
                     name: "EAX".to_string(),
                     size: 4
                 },
-                operand: 53,
+                source: RegOrImmediate::Immediate { i: 53 },
             })
         );
         assert_eq!(
             parse_instruction("AdD  al, 'z'"),
-            Ok(Instruction::ADDimm {
+            Ok(Instruction::ADD {
                 destination: Register {
                     name: "AL".to_string(),
                     size: 1
                 },
-                operand: 122,
+                source: RegOrImmediate::Immediate { i: 122 },
             })
         );
         assert_eq!(
             parse_instruction(r#"add  al, '\n'"#),
-            Ok(Instruction::ADDimm {
+            Ok(Instruction::ADD {
                 destination: Register {
                     name: "AL".to_string(),
                     size: 1
                 },
-                operand: 10,
+                source: RegOrImmediate::Immediate { i: 10 },
             })
         );
         assert_eq!(
             parse_instruction(r#"add  al, '\t'"#),
-            Ok(Instruction::ADDimm {
+            Ok(Instruction::ADD {
                 destination: Register {
                     name: "AL".to_string(),
                     size: 1
                 },
-                operand: 9,
+                source: RegOrImmediate::Immediate { i: 9 },
             })
         );
     }
@@ -571,12 +536,12 @@ mod instruction_parse_test {
     fn test_immediate() {
         assert_eq!(
             parse_instruction("test rsp, 0xF"),
-            Ok(Instruction::TESTimm {
+            Ok(Instruction::TEST {
                 src1: Register {
                     name: "RSP".to_string(),
                     size: 8
                 },
-                operand: 0xf
+                src2: RegOrImmediate::Immediate { i: 0xf }
             })
         )
     }
@@ -585,25 +550,27 @@ mod instruction_parse_test {
     fn sub() {
         assert_eq!(
             parse_instruction("sub rsp, 8"),
-            Ok(Instruction::SUBimm {
+            Ok(Instruction::SUB {
                 destination: Register {
                     name: "RSP".to_string(),
                     size: 8
                 },
-                operand: 8
+                source: RegOrImmediate::Immediate { i: 8 }
             })
         );
         assert_eq!(
             parse_instruction("sub rsp, rbx"),
-            Ok(Instruction::SUBreg {
+            Ok(Instruction::SUB {
                 destination: Register {
                     name: "RSP".to_string(),
                     size: 8
                 },
-                source: Register {
-                    name: "RBX".to_string(),
-                    size: 8
-                },
+                source: RegOrImmediate::Register {
+                    r: Register {
+                        name: "RBX".to_string(),
+                        size: 8
+                    },
+                }
             })
         );
         assert_eq!(

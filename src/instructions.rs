@@ -12,6 +12,11 @@ pub enum Instruction {
         operand: i64,
     },
 
+    IMUL {
+        destination: Register,
+        source: RegOrImmediate,
+    },
+
     PUSHreg {
         source: Register,
     },
@@ -116,10 +121,16 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
     let mnem = split[0].to_uppercase();
 
     match (mnem.as_str(), split.len() - 1) {
-        ("MOV", 2) => Ok(Instruction::MOVimm {
-            destination: Register::parse(split[1].to_string())?,
-            operand: parse_immediate_arg(split[2])?,
-        }),
+        ("MOV", 2) => match parse_2_instruction_args(split)? {
+            (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::MOVreg {
+                destination: reg1,
+                source: reg2,
+            }),
+            (reg1, RegOrImmediate::Immediate { i }) => Ok(Instruction::MOVimm {
+                destination: reg1,
+                operand: i,
+            }),
+        },
         ("PUSH", 1) => match parse_1_instruction_arg(split)? {
             RegOrImmediate::Register { r } => {
                 if r.size == 1 {
@@ -174,6 +185,13 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
                 label: split[1].to_string(),
             }),
         },
+        ("IMUL", 2) => {
+            let (reg, reg_or_imm) = parse_2_instruction_args(split)?;
+            Ok(Instruction::IMUL {
+                destination: reg,
+                source: reg_or_imm,
+            })
+        }
         ("ADD", 2) => match parse_2_instruction_args(split)? {
             (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::ADDreg {
                 destination: reg1,
@@ -228,7 +246,8 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
     }
 }
 
-enum RegOrImmediate {
+#[derive(PartialEq, Debug)]
+pub enum RegOrImmediate {
     Register { r: Register },
     Immediate { i: i64 },
 }
@@ -305,7 +324,7 @@ fn parse_1_instruction_arg(instruction: Vec<&str>) -> Result<RegOrImmediate, Str
 #[cfg(test)]
 mod instruction_parse_test {
     use crate::{
-        instructions::{parse_instruction, Instruction, JumpTarget},
+        instructions::{parse_instruction, Instruction, JumpTarget, RegOrImmediate},
         registers::Register,
     };
 
@@ -361,6 +380,52 @@ mod instruction_parse_test {
                     size: 1
                 },
                 operand: 9,
+            })
+        );
+    }
+
+    #[test]
+    fn mov_register() {
+        assert_eq!(
+            parse_instruction("mov rdi, rax"),
+            Ok(Instruction::MOVreg {
+                destination: Register {
+                    name: "RDI".to_string(),
+                    size: 8
+                },
+                source: Register {
+                    name: "RAX".to_string(),
+                    size: 8
+                }
+            })
+        )
+    }
+
+    #[test]
+    fn imul() {
+        assert_eq!(
+            parse_instruction("imul rax, rbx"),
+            Ok(Instruction::IMUL {
+                destination: Register {
+                    name: "RAX".to_string(),
+                    size: 8
+                },
+                source: RegOrImmediate::Register {
+                    r: Register {
+                        name: "RBX".to_string(),
+                        size: 8
+                    }
+                }
+            })
+        );
+        assert_eq!(
+            parse_instruction("imul rax, 52"),
+            Ok(Instruction::IMUL {
+                destination: Register {
+                    name: "RAX".to_string(),
+                    size: 8
+                },
+                source: RegOrImmediate::Immediate { i: 52 }
             })
         );
     }

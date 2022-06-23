@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use crate::registers::Register;
 use unescape::unescape;
 
@@ -79,6 +77,13 @@ pub enum Instruction {
         target: JumpTarget,
         condition: JumpCondition,
     },
+
+    CALLlabel {
+        label: String,
+    },
+    RET {},
+
+    SYSCALL {},
     // TODO: call label, ret, jmp, jl jg jz, syscall, lea
 }
 
@@ -93,6 +98,7 @@ pub enum JumpCondition {
     None,
     Zero,
     Less,
+    Greater,
 }
 
 fn parse_instruction(line: &str) -> Result<Instruction, String> {
@@ -131,6 +137,18 @@ fn parse_instruction(line: &str) -> Result<Instruction, String> {
         ("NOT", 1) => Ok(Instruction::NOTreg {
             destination: Register::parse(split[1].to_string())?,
         }),
+        ("JMP", 1) => Ok(Instruction::JMPlabel {
+            target: parse_label(split[1].to_string())?,
+            condition: JumpCondition::None,
+        }),
+        ("SYSCALL", 0) => Ok(Instruction::SYSCALL {}),
+        ("RET", 0) => Ok(Instruction::RET {}),
+        ("CALL", 1) => match Register::parse(split[1].to_string()) {
+            Ok(_) => Err(format!("unspported call to register value {}", split[1])),
+            Err(_) => Ok(Instruction::CALLlabel {
+                label: split[1].to_string(),
+            }),
+        },
         ("ADD", 2) => match parse_2_instruction_args(split)? {
             (reg1, RegOrImmediate::Register { r: reg2 }) => Ok(Instruction::ADDreg {
                 destination: reg1,
@@ -188,6 +206,23 @@ fn parse_instruction(line: &str) -> Result<Instruction, String> {
 enum RegOrImmediate {
     Register { r: Register },
     Immediate { i: i64 },
+}
+
+fn parse_label(label: String) -> Result<JumpTarget, String> {
+    match Register::parse(label.to_string()) {
+        Ok(_) => Err("cannot use register as label".to_string()),
+        Err(_) => {
+            let ends = &['b', 'f'][..];
+            if label.ends_with(ends) {
+                return Ok(JumpTarget::Relative {
+                    forwards: label.ends_with("f"),
+                    label: label[..label.len() - 1].to_string(),
+                });
+            } else {
+                return Ok(JumpTarget::Absolute { label: label });
+            }
+        }
+    }
 }
 
 fn parse_2_instruction_args(instruction: Vec<&str>) -> Result<(Register, RegOrImmediate), String> {
@@ -491,7 +526,7 @@ mod instruction_parse_test {
     }
 
     #[test]
-    fn jump_test() {
+    fn jump_unconditional() {
         assert_eq!(
             parse_instruction("jmp .LeaxWins_0"),
             Ok(Instruction::JMPlabel {
@@ -516,11 +551,58 @@ mod instruction_parse_test {
             Ok(Instruction::JMPlabel {
                 target: JumpTarget::Relative {
                     forwards: false,
-                    label: "2".to_string()
+                    label: "1".to_string()
                 },
                 condition: JumpCondition::None
             }),
         )
+    }
+
+    fn jump_conditional() {
+        assert_eq!(
+            parse_instruction("jz 2f"),
+            Ok(Instruction::JMPlabel {
+                target: JumpTarget::Relative {
+                    forwards: true,
+                    label: "2".to_string()
+                },
+                condition: JumpCondition::Zero
+            }),
+        );
+        assert_eq!(
+            parse_instruction("jg label"),
+            Ok(Instruction::JMPlabel {
+                target: JumpTarget::Absolute {
+                    label: "label".to_string()
+                },
+                condition: JumpCondition::Greater,
+            }),
+        );
+        assert_eq!(
+            parse_instruction("jl label"),
+            Ok(Instruction::JMPlabel {
+                target: JumpTarget::Absolute {
+                    label: "label".to_string()
+                },
+                condition: JumpCondition::Less,
+            }),
+        );
+    }
+
+    #[test]
+    fn call_label() {
+        assert_eq!(
+            parse_instruction("call writechar"),
+            Ok(Instruction::CALLlabel {
+                label: "writechar".to_string(),
+            }),
+        );
+    }
+
+    #[test]
+    fn simple_instructions() {
+        assert_eq!(parse_instruction("Syscall"), Ok(Instruction::SYSCALL {}),);
+        assert_eq!(parse_instruction("rEt"), Ok(Instruction::RET {}),);
     }
 }
 

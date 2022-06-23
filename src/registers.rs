@@ -89,11 +89,11 @@ impl Register {
     pub fn parse(name: String) -> Result<Register, String> {
         let normalized_name: String = name.to_uppercase();
 
-        let lookup = REGISTERS.get(normalized_name.as_str());
+        let lookup = REGISTERS.get_entry(normalized_name.as_str());
 
         match lookup {
-            Some(size) => Ok(Register {
-                name: normalized_name,
+            Some((reg, size)) => Ok(Register {
+                name: reg.to_string(),
                 size: size.clone(),
             }),
             None => Err(format!("invalid register {}", name).to_string()),

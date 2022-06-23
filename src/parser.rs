@@ -27,6 +27,10 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Strin
             continue;
         }
 
+        if current_section == Section::Data || current_section == Section::None {
+
+        }
+
         if line.starts_with(".") {
             if line.split_whitespace().count() == 1 {
                 if line.ends_with(":") {
@@ -36,7 +40,7 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Strin
                     // Look for stuff like `.data` and `.text`
                     current_section = parse_section(line)?
                 }
-            } else if current_section == Section::Data {
+            } else  {
                 // TODO: Parse data section, especially
                 // .LCharacter: .ascii "a"
                 // .Ltmp64: .byte 0, 0, 0, 0, 0, 0, 0, 0

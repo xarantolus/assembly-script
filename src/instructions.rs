@@ -51,6 +51,11 @@ pub enum Instruction {
         source: Register,
     },
 
+    XORreg {
+        destination: Register,
+        source: Register,
+    },
+
     CMPreg {
         src1: Register,
         src2: Register,
@@ -101,7 +106,7 @@ pub enum JumpCondition {
     Greater,
 }
 
-fn parse_instruction(line: &str) -> Result<Instruction, String> {
+pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
     // Split e.g. `mov rax, 0` into `"mov", "rax", "0"`
     let split: Vec<&str> = line
         .split([' ', ',', '\t'])
@@ -141,6 +146,26 @@ fn parse_instruction(line: &str) -> Result<Instruction, String> {
             target: parse_label(split[1].to_string())?,
             condition: JumpCondition::None,
         }),
+        ("JZ", 1) => Ok(Instruction::JMPlabel {
+            target: parse_label(split[1].to_string())?,
+            condition: JumpCondition::Zero,
+        }),
+        ("JG", 1) => Ok(Instruction::JMPlabel {
+            target: parse_label(split[1].to_string())?,
+            condition: JumpCondition::Greater,
+        }),
+        ("JL", 1) => Ok(Instruction::JMPlabel {
+            target: parse_label(split[1].to_string())?,
+            condition: JumpCondition::Less,
+        }),
+        ("XOR", 2) => {
+            let reg1 = Register::parse(split[1].to_string())?;
+            let reg2 = Register::parse(split[2].to_string())?;
+            return Ok(Instruction::XORreg {
+                destination: reg1,
+                source: reg2,
+            });
+        }
         ("SYSCALL", 0) => Ok(Instruction::SYSCALL {}),
         ("RET", 0) => Ok(Instruction::RET {}),
         ("CALL", 1) => match Register::parse(split[1].to_string()) {
@@ -558,6 +583,7 @@ mod instruction_parse_test {
         )
     }
 
+    #[test]
     fn jump_conditional() {
         assert_eq!(
             parse_instruction("jz 2f"),
@@ -603,6 +629,23 @@ mod instruction_parse_test {
     fn simple_instructions() {
         assert_eq!(parse_instruction("Syscall"), Ok(Instruction::SYSCALL {}),);
         assert_eq!(parse_instruction("rEt"), Ok(Instruction::RET {}),);
+    }
+
+    #[test]
+    fn xor_reg() {
+        assert_eq!(
+            parse_instruction("xor rax, rax"),
+            Ok(Instruction::XORreg {
+                destination: Register {
+                    name: "RAX".to_string(),
+                    size: 8
+                },
+                source: Register {
+                    name: "RAX".to_string(),
+                    size: 8
+                },
+            }),
+        );
     }
 }
 

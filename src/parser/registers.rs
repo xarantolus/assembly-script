@@ -103,7 +103,7 @@ impl Register {
 
 #[cfg(test)]
 mod register_parse_test {
-    use crate::registers::Register;
+    use crate::parser::registers::Register;
 
     #[test]
     fn invalid_registers() {

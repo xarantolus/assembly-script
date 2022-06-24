@@ -1,4 +1,4 @@
-use crate::registers::Register;
+use crate::parser::registers::Register;
 use phf::phf_map;
 use regex::Regex;
 use std::vec;
@@ -364,8 +364,8 @@ fn parse_1_instruction_arg(instruction: Vec<&str>) -> Result<ValueOperand, Strin
 #[cfg(test)]
 mod instruction_parse_test {
     use crate::{
-        instructions::{parse_instruction, Instruction, JumpTarget, ValueOperand},
-        registers::Register,
+        parser::instructions::{parse_instruction, Instruction, JumpTarget, ValueOperand},
+        parser::registers::Register,
     };
 
     use super::JumpCondition;
@@ -961,7 +961,7 @@ fn parse_as_memory_operand(expr: &str) -> Result<ValueOperand, String> {
 
 #[cfg(test)]
 mod memory_operands {
-    use crate::registers::Register;
+    use crate::parser::registers::Register;
 
     use super::{parse_as_memory_operand, ValueOperand};
 

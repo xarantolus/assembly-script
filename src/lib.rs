@@ -27,7 +27,8 @@ pub fn interpret_assembly_file(
 ) -> Result<i8, String> {
     alert(input_file_content.as_str());
 
-    let parsed_file = parser::parse_gnu_as_input(input_file_content)?;
+    let parsed_file =
+        parser::parse_gnu_as_input(input_file_content).map_err(|e| format!("{}", e))?;
 
     return Ok(42);
 }

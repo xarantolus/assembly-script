@@ -1,7 +1,7 @@
 use crate::registers::Register;
 use phf::phf_map;
 use regex::Regex;
-use std::{fmt::format, vec};
+use std::vec;
 use unescape::unescape;
 
 use lazy_static::lazy_static;

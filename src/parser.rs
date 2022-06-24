@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::instructions::{parse_instruction, Instruction};
 
 #[derive(PartialEq, Debug)]
@@ -18,14 +20,35 @@ pub enum LineType {
     Instruction { i: Instruction },
 }
 
-pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, String> {
+pub struct ParseError {
+    line_number: i64,
+    line_text: String,
+
+    message: String,
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "line {} ({}): {}",
+            self.line_number, self.line_text, self.message
+        )
+    }
+}
+
+pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, ParseError> {
     let lines = input_file_content.lines();
 
     let mut current_section = Section::None;
 
-    let mut parsed_lines = Vec::new();
+    let mut parsed_lines: Vec<LineType> = Vec::new();
+
+    let mut line_num: i64 = 0;
 
     for mut line in lines {
+        line_num += 1;
+
         line = line.trim();
         if is_ignored_line(line) {
             continue;
@@ -48,7 +71,11 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Strin
         let split = line.split_once(":");
         if split.is_some() {
             let (label, rest) = split.unwrap();
-            parsed_lines.push(parse_label(label)?);
+            parsed_lines.push(parse_label(label).map_err(|e| ParseError {
+                line_number: line_num,
+                line_text: line.to_string(),
+                message: "parsing label: ".to_string() + e.as_str(),
+            })?);
 
             let trimmed = rest.trim();
             if trimmed.is_empty() {
@@ -59,7 +86,12 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Strin
             line = trimmed;
         }
 
-        let next_instruction = parse_instruction(line)?;
+        let next_instruction = parse_instruction(line).map_err(|e| ParseError {
+            line_number: line_num,
+            line_text: line.to_string(),
+            message: "parsing instruction: ".to_string() + e.as_str(),
+        })?;
+
         parsed_lines.push(LineType::Instruction {
             i: next_instruction,
         })

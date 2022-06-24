@@ -44,9 +44,19 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Strin
         }
 
         // Look for labels like "function_name:"
-        if line.ends_with(":") && line.split_whitespace().count() == 1 {
-            parsed_lines.push(parse_label(line)?);
-            continue;
+        // some lines also are like "label: instruction", we want to handle that too
+        let split = line.split_once(":");
+        if split.is_some() {
+            let (label, rest) = split.unwrap();
+            parsed_lines.push(parse_label(label)?);
+
+            let trimmed = rest.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // Fall though to instruction parsing
+            line = trimmed;
         }
 
         let next_instruction = parse_instruction(line)?;
@@ -94,11 +104,47 @@ mod test_gnu_as_parser {
                     },
                     LineType::Instruction {
                         i: Instruction::MOV {
-                            destination: Register {
-                                name: "RAX".to_string(),
-                                size: 8
+                            destination: ValueOperand::Register {
+                                r: Register {
+                                    name: "RAX".to_string(),
+                                    size: 8
+                                }
                             },
                             source: ValueOperand::Immediate { i: 0 }
+                        }
+                    },
+                    LineType::Instruction {
+                        i: Instruction::RET {}
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn simple_call() {
+        let res = parse_gnu_as_input(
+            r#"
+        .text
+        label: call label
+        ret
+        "#
+            .to_string(),
+        );
+        assert!(res.is_ok());
+
+        let parsed = res.ok().unwrap();
+
+        assert_eq!(
+            parsed,
+            InputFile {
+                parsed_lines: vec![
+                    LineType::Label {
+                        name: "label".to_string()
+                    },
+                    LineType::Instruction {
+                        i: Instruction::CALLlabel {
+                            label: "label".to_string()
                         }
                     },
                     LineType::Instruction {
@@ -132,9 +178,9 @@ fn parse_label(line: &str) -> Result<LineType, String> {
         return Err(format!("invalid label line {}", line));
     }
 
-    let line_str = line.to_string();
+    let line_str = line.trim_end_matches(":");
     return Ok(LineType::Label {
-        name: line_str[..line_str.len() - 1].to_string(),
+        name: line_str[..line_str.len()].to_string(),
     });
 }
 

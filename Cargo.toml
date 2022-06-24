@@ -14,6 +14,8 @@ default = ["console_error_panic_hook"]
 wasm-bindgen = "0.2.63"
 unescape = "0.1.0"
 phf = { version = "0.10", features = ["macros"] }
+regex = "1.5.6"
+lazy_static = "1.4.0"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

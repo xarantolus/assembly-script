@@ -1,12 +1,14 @@
-use std::{slice::SplitInclusive, vec};
-
 use crate::registers::Register;
+use phf::phf_map;
+use regex::Regex;
+use std::{fmt::format, vec};
 use unescape::unescape;
 
+use lazy_static::lazy_static;
 #[derive(PartialEq, Debug)]
 pub enum Instruction {
     MOV {
-        destination: Register,
+        destination: ValueOperand,
         source: ValueOperand,
     },
 
@@ -34,6 +36,11 @@ pub enum Instruction {
     },
 
     AND {
+        destination: Register,
+        source: ValueOperand,
+    },
+
+    LEA {
         destination: Register,
         source: ValueOperand,
     },
@@ -80,7 +87,7 @@ pub enum JumpTarget {
 #[derive(PartialEq, Debug)]
 pub enum JumpCondition {
     None,
-    Zero,
+    ZeroEqual,
     Less,
     Greater,
 }
@@ -130,13 +137,19 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
     let mnem = split[0].to_uppercase();
 
     match (mnem.as_str(), split.len() - 1) {
-        ("MOV", 2) => {
-            let (dest, src) = parse_2_instruction_args(split)?;
-            return Ok(Instruction::MOV {
-                destination: dest,
-                source: src,
-            });
-        }
+        ("MOV", 2) => match parse_mem_and_value(split.clone()) {
+            Ok((mem, val)) => Ok(Instruction::MOV {
+                destination: mem,
+                source: val,
+            }),
+            Err(_) => {
+                let (dest, src) = parse_2_instruction_args(split)?;
+                return Ok(Instruction::MOV {
+                    destination: ValueOperand::Register { r: dest },
+                    source: src,
+                });
+            }
+        },
         ("PUSH", 1) => match parse_1_instruction_arg(split)? {
             ValueOperand::Register { r } => {
                 if r.size == 1 {
@@ -164,9 +177,9 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
             target: parse_label(split[1].to_string())?,
             condition: JumpCondition::None,
         }),
-        ("JZ", 1) => Ok(Instruction::JMPlabel {
+        ("JZ", 1) | ("JE", 1) => Ok(Instruction::JMPlabel {
             target: parse_label(split[1].to_string())?,
-            condition: JumpCondition::Zero,
+            condition: JumpCondition::ZeroEqual,
         }),
         ("JG", 1) => Ok(Instruction::JMPlabel {
             target: parse_label(split[1].to_string())?,
@@ -234,6 +247,19 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
                 src2: src2,
             })
         }
+        ("LEA", 2) => {
+            let (src1, src2) = parse_2_instruction_args(split)?;
+            if !matches!(src2, ValueOperand::Memory { label: _, size: _ }) {
+                return Err(format!(
+                    "Need constant memory operand for LEA, but got {:?}",
+                    src2
+                ));
+            }
+            Ok(Instruction::LEA {
+                destination: src1,
+                source: src2,
+            })
+        }
         _ => Err(format!("Cannot parse instruction {}", line).to_string()),
     }
 }
@@ -243,6 +269,7 @@ pub enum ValueOperand {
     Register { r: Register },
     Immediate { i: i64 },
     Memory { label: String, size: i8 },
+    DynamicMemory { register: Register, size: i8 },
 }
 
 fn parse_label(label: String) -> Result<JumpTarget, String> {
@@ -262,15 +289,29 @@ fn parse_label(label: String) -> Result<JumpTarget, String> {
     }
 }
 
+fn parse_mem_and_value(instruction: Vec<&str>) -> Result<(ValueOperand, ValueOperand), String> {
+    if instruction.len() != 3 {
+        panic!(
+            "invalid number of operands: got {}, expected 3",
+            instruction.len()
+        );
+    }
+    let mem_operand = parse_as_memory_operand(instruction[1])?;
+    let other = parse_any_arg(instruction[2])?;
+
+    return Ok((mem_operand, other));
+}
+
 fn parse_2_instruction_args(instruction: Vec<&str>) -> Result<(Register, ValueOperand), String> {
     if instruction.len() != 3 {
         panic!(
             "invalid number of operands: got {}, expected 3",
             instruction.len()
         );
-    } else {
-        match Register::parse(instruction[1].to_string()) {
-            Ok(reg1) => match Register::parse(instruction[2].to_string()) {
+    }
+    match Register::parse(instruction[1].to_string()) {
+        Ok(reg1) => {
+            match Register::parse(instruction[2].to_string()) {
                 Ok(reg2) => {
                     if reg1.size == reg2.size {
                         Ok((reg1, ValueOperand::Register { r: reg2 }))
@@ -278,20 +319,26 @@ fn parse_2_instruction_args(instruction: Vec<&str>) -> Result<(Register, ValueOp
                         Err(format!("invalid use of registers {} and {} of different size in {} instruction", reg1.name, reg2.name,                         instruction[0].to_uppercase()).to_string())
                     }
                 }
-                _ => Ok((
-                    // TODO: Check if immediate is too large for destination
-                    reg1,
-                    ValueOperand::Immediate {
-                        i: parse_immediate_arg(instruction[2])?,
-                    },
-                )),
-            },
-            _ => Err(format!(
-                "invalid first operand {} for {} instruction",
-                instruction[1],
-                instruction[0].to_uppercase()
-            )),
+                _ => {
+                    let mem_operand = parse_as_memory_operand(instruction[2]);
+                    match mem_operand {
+                        Err(_) => Ok((
+                            // TODO: Check if immediate is too large for destination
+                            reg1,
+                            ValueOperand::Immediate {
+                                i: parse_immediate_arg(instruction[2])?,
+                            },
+                        )),
+                        Ok(mem) => Ok((reg1, mem)),
+                    }
+                }
+            }
         }
+        _ => Err(format!(
+            "invalid first operand {} for {} instruction",
+            instruction[1],
+            instruction[0].to_uppercase()
+        )),
     }
 }
 
@@ -327,14 +374,18 @@ mod instruction_parse_test {
     fn mov_memory() {
         assert_eq!(
             parse_instruction("mov al, BYTE PTR [rip + .LCharacter]"),
-            // TODO
-            todo!() // Ok(Instruction::MOV {
-                    //     destination: Register {
-                    //         name: "RAX".to_string(),
-                    //         size: 8
-                    //     },
-                    //     source: ValueOperand::Immediate { i: 53 },
-                    // })
+            Ok(Instruction::MOV {
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "AL".to_string(),
+                        size: 1
+                    }
+                },
+                source: ValueOperand::Memory {
+                    label: ".LCharacter".to_string(),
+                    size: 1
+                },
+            })
         );
     }
 
@@ -343,9 +394,11 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("mov rax, 53"),
             Ok(Instruction::MOV {
-                destination: Register {
-                    name: "RAX".to_string(),
-                    size: 8
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "RAX".to_string(),
+                        size: 8
+                    },
                 },
                 source: ValueOperand::Immediate { i: 53 },
             })
@@ -353,9 +406,11 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("mov  eAx, 53"),
             Ok(Instruction::MOV {
-                destination: Register {
-                    name: "EAX".to_string(),
-                    size: 4
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "EAX".to_string(),
+                        size: 4
+                    },
                 },
                 source: ValueOperand::Immediate { i: 53 },
             })
@@ -363,9 +418,11 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("mov  al, 'z'"),
             Ok(Instruction::MOV {
-                destination: Register {
-                    name: "AL".to_string(),
-                    size: 1
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "AL".to_string(),
+                        size: 1
+                    }
                 },
                 source: ValueOperand::Immediate { i: 122 },
             })
@@ -373,9 +430,11 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction(r#"mov  al, '\n'"#),
             Ok(Instruction::MOV {
-                destination: Register {
-                    name: "AL".to_string(),
-                    size: 1
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "AL".to_string(),
+                        size: 1
+                    }
                 },
                 source: ValueOperand::Immediate { i: 10 },
             })
@@ -383,9 +442,11 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction(r#"mov  al, '\t'"#),
             Ok(Instruction::MOV {
-                destination: Register {
-                    name: "AL".to_string(),
-                    size: 1
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "AL".to_string(),
+                        size: 1
+                    }
                 },
                 source: ValueOperand::Immediate { i: 9 },
             })
@@ -397,9 +458,11 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("mov rdi, rax"),
             Ok(Instruction::MOV {
-                destination: Register {
-                    name: "RDI".to_string(),
-                    size: 8
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "RDI".to_string(),
+                        size: 8
+                    }
                 },
                 source: ValueOperand::Register {
                     r: Register {
@@ -667,6 +730,23 @@ mod instruction_parse_test {
     }
 
     #[test]
+    fn lea_label() {
+        assert_eq!(
+            parse_instruction("lea rsi, [rip + .LCharacter]"),
+            Ok(Instruction::LEA {
+                destination: Register {
+                    name: "RSI".to_string(),
+                    size: 8
+                },
+                source: ValueOperand::Memory {
+                    label: ".LCharacter".to_string(),
+                    size: 0
+                }
+            })
+        );
+    }
+
+    #[test]
     fn jump_conditional() {
         assert_eq!(
             parse_instruction("jz 2f"),
@@ -675,7 +755,17 @@ mod instruction_parse_test {
                     forwards: true,
                     label: "2".to_string()
                 },
-                condition: JumpCondition::Zero
+                condition: JumpCondition::ZeroEqual
+            }),
+        );
+        assert_eq!(
+            parse_instruction("je 2f"),
+            Ok(Instruction::JMPlabel {
+                target: JumpTarget::Relative {
+                    forwards: true,
+                    label: "2".to_string()
+                },
+                condition: JumpCondition::ZeroEqual
             }),
         );
         assert_eq!(
@@ -762,7 +852,7 @@ fn parse_as_char_constant(nstr: &str) -> Result<i64, String> {
                     }
                 }
                 _ => Err(format!(
-                    "invalid string length {} for {} (from {})",
+                    "invalid string/char constant length {} for {} (from {})",
                     s.len(),
                     s,
                     nstr
@@ -773,16 +863,120 @@ fn parse_as_char_constant(nstr: &str) -> Result<i64, String> {
     }
 }
 
-fn parse_as_memory_operand(nstr: &str) -> Result<ValueOperand, String> {
-    Err("unimplemented".to_string())
+lazy_static! {
+    static ref MEM_OPERAND_REGEX: Regex = Regex::new(r"(?m)(\[(.*?)\]|\S+)").unwrap();
+    static ref MEMORY_LABEL_OFFSET_REGEX: Regex =
+        Regex::new(r"(?m)^(?:rip\s*\+)?\s*(.*?)\s*$").unwrap();
+}
+
+const MEM_OPERAND_SIZE_MAP: phf::Map<&str, i8> = phf_map! {
+    "BYTE" => 1,
+    "WORD" => 2,
+    "DWORD" => 4,
+    "QWORD" => 8,
+};
+
+fn parse_as_memory_operand(expr: &str) -> Result<ValueOperand, String> {
+    let parts: Vec<&str> = MEM_OPERAND_REGEX
+        .captures_iter(expr)
+        .map(|m| m.get(0).map_or("", |m| m.as_str()))
+        .filter(|w| !w.is_empty())
+        .collect();
+
+    match parts.as_slice() {
+        [reg] => {
+            // Something like "[rsp]"
+            if !reg.starts_with("[") || !reg.ends_with("]") {
+                return Err(format!(
+                    "Invalid memory operand {}, must be something like [register]",
+                    reg
+                ));
+            }
+
+            let label: Vec<&str> = MEMORY_LABEL_OFFSET_REGEX
+                .captures_iter(&reg[1..&reg.len() - 1])
+                .map(|m| m.get(1).map_or("", |p| p.as_str()))
+                .filter(|w| !w.is_empty())
+                .collect();
+            if label.is_empty() {
+                return Err(format!(
+                    "Invalid memory operand {}, must be something like [register]",
+                    reg
+                ));
+            }
+
+            match Register::parse(label[0].to_string()) {
+                Ok(r) => Ok(ValueOperand::DynamicMemory {
+                    register: r,
+                    size: 0,
+                }),
+                Err(_) => Ok(ValueOperand::Memory {
+                    label: label[0].to_string(),
+                    size: 0,
+                }),
+            }
+        }
+        [size_str, ptr, deref] => {
+            if !ptr.eq_ignore_ascii_case("ptr") {
+                return Err(
+                    "Second part of memory dereference with 3 parts must be the text \"ptr\""
+                        .to_string(),
+                );
+            }
+
+            let maybe_size = MEM_OPERAND_SIZE_MAP.get_entry(size_str.to_uppercase().as_str());
+            if matches!(maybe_size, None) {
+                return Err(format!("Invalid memory operand size {}", size_str));
+            }
+
+            let (_, size) = maybe_size.unwrap();
+
+            if !deref.starts_with("[") || !deref.ends_with("]") {
+                return Err(format!(
+                    "Invalid memory operand {}, must be something like [rip + label]",
+                    deref
+                ));
+            }
+
+            let label: Vec<&str> = MEMORY_LABEL_OFFSET_REGEX
+                .captures_iter(&deref[1..&deref.len() - 1])
+                .map(|m| m.get(1).map_or("", |p| p.as_str()))
+                .filter(|w| !w.is_empty())
+                .collect();
+            match label.len() {
+                1 => {
+                    return Ok(ValueOperand::Memory {
+                        label: label[0].to_string(),
+                        size: size.clone(),
+                    })
+                }
+                _ => Err(format!("Cannot parse label in memory offset {}", deref).to_string()),
+            }
+        }
+        _ => {
+            return Err(format!("Not a memory dereference: {}", expr).to_string());
+        }
+    }
 }
 
 #[cfg(test)]
 mod memory_operands {
+    use crate::registers::Register;
+
     use super::{parse_as_memory_operand, ValueOperand};
 
     #[test]
     fn parse_mem_operands() {
+        assert_eq!(
+            parse_as_memory_operand("[rax]"),
+            Ok(ValueOperand::DynamicMemory {
+                register: Register {
+                    name: "RAX".to_string(),
+                    size: 8,
+                },
+                size: 0
+            })
+        );
         assert_eq!(
             parse_as_memory_operand("BYTE PTR [rip + .LCharacter]"),
             Ok(ValueOperand::Memory {
@@ -797,5 +991,19 @@ mod memory_operands {
                 size: 8
             })
         )
+    }
+}
+
+fn parse_any_arg(expr: &str) -> Result<ValueOperand, String> {
+    let mem = parse_as_memory_operand(expr);
+    if mem.is_ok() {
+        return mem;
+    }
+
+    match Register::parse(expr.to_string()) {
+        Ok(reg) => Ok(ValueOperand::Register { r: reg }),
+        Err(_) => Ok(ValueOperand::Immediate {
+            i: parse_immediate_arg(expr)?,
+        }),
     }
 }

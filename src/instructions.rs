@@ -354,7 +354,7 @@ fn parse_1_instruction_arg(instruction: Vec<&str>) -> Result<ValueOperand, Strin
             _ => Ok(
                 // TODO: Check if immediate is too large for destination
                 ValueOperand::Immediate {
-                    i: parse_immediate_arg(instruction[2])?,
+                    i: parse_immediate_arg(instruction[1])?,
                 },
             ),
         }
@@ -838,8 +838,8 @@ fn parse_immediate_arg(nstr: &str) -> Result<i64, String> {
     }
 }
 
-fn parse_as_char_constant(nstr: &str) -> Result<i64, String> {
-    match unescape(nstr) {
+fn parse_as_char_constant(expr: &str) -> Result<i64, String> {
+    match unescape(expr) {
         Some(s) => {
             let chars: Vec<char> = s.chars().collect();
             match s.len() {
@@ -848,18 +848,18 @@ fn parse_as_char_constant(nstr: &str) -> Result<i64, String> {
                     if chars[0] == '\'' && chars[0] == chars[2] {
                         Ok(chars[1] as i64)
                     } else {
-                        Err(format!("invalid quotes in string {}, expected \"'\"", nstr))
+                        Err(format!("invalid quotes in string {}, expected \"'\"", expr))
                     }
                 }
                 _ => Err(format!(
                     "invalid string/char constant length {} for {} (from {})",
                     s.len(),
                     s,
-                    nstr
+                    expr
                 )),
             }
         }
-        None => Err(format!("char unescape not possible for {nstr}")),
+        None => Err(format!("char unescape not possible for {}", expr)),
     }
 }
 

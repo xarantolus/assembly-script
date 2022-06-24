@@ -1,7 +1,8 @@
 pub mod parser;
+pub mod vm;
 
+use vm::vm::{SyscallHandler, VM};
 use wasm_bindgen::prelude::*;
-
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -27,6 +28,16 @@ pub fn interpret_assembly_file(
 
     let parsed_file =
         parser::input::parse_gnu_as_input(input_file_content).map_err(|e| format!("{}", e))?;
+
+    let vm = VM::new(
+        parsed_file,
+        "main".to_string(),
+        8192 << 10,
+        SyscallHandler {
+            write_stdout,
+            write_stderr,
+        },
+    );
 
     return Ok(42);
 }

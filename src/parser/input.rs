@@ -37,6 +37,7 @@ impl fmt::Display for ParseError {
     }
 }
 
+// TODO: reject input with multiple labels of the same name
 pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, ParseError> {
     let lines = input_file_content.lines();
 
@@ -105,6 +106,7 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Parse
 #[cfg(test)]
 mod test_gnu_as_parser {
     use crate::parser::instructions::{Instruction, ValueOperand};
+    use crate::parser::registers::GPRegister;
     use crate::parser::{
         input::{InputFile, LineType},
         registers::Register,
@@ -139,7 +141,8 @@ mod test_gnu_as_parser {
                             destination: ValueOperand::Register {
                                 r: Register {
                                     name: "RAX".to_string(),
-                                    size: 8
+                                    size: 8,
+                                    part_of: GPRegister::RAX,
                                 }
                             },
                             source: ValueOperand::Immediate { i: 0 }

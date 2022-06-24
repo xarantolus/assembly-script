@@ -365,7 +365,7 @@ fn parse_1_instruction_arg(instruction: Vec<&str>) -> Result<ValueOperand, Strin
 mod instruction_parse_test {
     use crate::{
         parser::instructions::{parse_instruction, Instruction, JumpTarget, ValueOperand},
-        parser::registers::Register,
+        parser::registers::{GPRegister, Register},
     };
 
     use super::JumpCondition;
@@ -378,7 +378,8 @@ mod instruction_parse_test {
                 destination: ValueOperand::Register {
                     r: Register {
                         name: "AL".to_string(),
-                        size: 1
+                        size: 1,
+                        part_of: GPRegister::RAX,
                     }
                 },
                 source: ValueOperand::Memory {
@@ -397,7 +398,8 @@ mod instruction_parse_test {
                 destination: ValueOperand::Register {
                     r: Register {
                         name: "RAX".to_string(),
-                        size: 8
+                        size: 8,
+                        part_of: GPRegister::RAX,
                     },
                 },
                 source: ValueOperand::Immediate { i: 53 },
@@ -409,7 +411,8 @@ mod instruction_parse_test {
                 destination: ValueOperand::Register {
                     r: Register {
                         name: "EAX".to_string(),
-                        size: 4
+                        size: 4,
+                        part_of: GPRegister::RAX,
                     },
                 },
                 source: ValueOperand::Immediate { i: 53 },
@@ -421,7 +424,8 @@ mod instruction_parse_test {
                 destination: ValueOperand::Register {
                     r: Register {
                         name: "AL".to_string(),
-                        size: 1
+                        size: 1,
+                        part_of: GPRegister::RAX,
                     }
                 },
                 source: ValueOperand::Immediate { i: 122 },
@@ -433,7 +437,8 @@ mod instruction_parse_test {
                 destination: ValueOperand::Register {
                     r: Register {
                         name: "AL".to_string(),
-                        size: 1
+                        size: 1,
+                        part_of: GPRegister::RAX,
                     }
                 },
                 source: ValueOperand::Immediate { i: 10 },
@@ -445,7 +450,8 @@ mod instruction_parse_test {
                 destination: ValueOperand::Register {
                     r: Register {
                         name: "AL".to_string(),
-                        size: 1
+                        size: 1,
+                        part_of: GPRegister::RAX,
                     }
                 },
                 source: ValueOperand::Immediate { i: 9 },
@@ -461,13 +467,15 @@ mod instruction_parse_test {
                 destination: ValueOperand::Register {
                     r: Register {
                         name: "RDI".to_string(),
-                        size: 8
+                        size: 8,
+                        part_of: GPRegister::RDI,
                     }
                 },
                 source: ValueOperand::Register {
                     r: Register {
                         name: "RAX".to_string(),
-                        size: 8
+                        size: 8,
+                        part_of: GPRegister::RAX,
                     }
                 }
             })
@@ -481,12 +489,14 @@ mod instruction_parse_test {
             Ok(Instruction::IMUL {
                 destination: Register {
                     name: "RAX".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RAX,
                 },
                 source: ValueOperand::Register {
                     r: Register {
                         name: "RBX".to_string(),
-                        size: 8
+                        size: 8,
+                        part_of: GPRegister::RBX,
                     }
                 }
             })
@@ -496,7 +506,8 @@ mod instruction_parse_test {
             Ok(Instruction::IMUL {
                 destination: Register {
                     name: "RAX".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RAX,
                 },
                 source: ValueOperand::Immediate { i: 52 }
             })
@@ -511,7 +522,8 @@ mod instruction_parse_test {
                 source: ValueOperand::Register {
                     r: Register {
                         name: "RBX".to_string(),
-                        size: 8
+                        size: 8,
+                        part_of: GPRegister::RBX,
                     },
                 }
             })
@@ -522,7 +534,8 @@ mod instruction_parse_test {
                 source: ValueOperand::Register {
                     r: Register {
                         name: "R8D".to_string(),
-                        size: 4
+                        size: 4,
+                        part_of: GPRegister::R8,
                     },
                 }
             })
@@ -533,7 +546,8 @@ mod instruction_parse_test {
                 source: ValueOperand::Register {
                     r: Register {
                         name: "SP".to_string(),
-                        size: 2
+                        size: 2,
+                        part_of: GPRegister::RSP,
                     },
                 }
             })
@@ -551,7 +565,8 @@ mod instruction_parse_test {
             Ok(Instruction::POP {
                 destination: Register {
                     name: "RBX".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RBX,
                 },
             })
         );
@@ -560,7 +575,8 @@ mod instruction_parse_test {
             Ok(Instruction::POP {
                 destination: Register {
                     name: "R8D".to_string(),
-                    size: 4
+                    size: 4,
+                    part_of: GPRegister::R8,
                 },
             })
         );
@@ -569,7 +585,8 @@ mod instruction_parse_test {
             Ok(Instruction::POP {
                 destination: Register {
                     name: "SP".to_string(),
-                    size: 2
+                    size: 2,
+                    part_of: GPRegister::RSP,
                 },
             })
         );
@@ -586,7 +603,8 @@ mod instruction_parse_test {
             Ok(Instruction::ADD {
                 destination: Register {
                     name: "RAX".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RAX,
                 },
                 source: ValueOperand::Immediate { i: 53 },
             })
@@ -596,7 +614,8 @@ mod instruction_parse_test {
             Ok(Instruction::ADD {
                 destination: Register {
                     name: "EAX".to_string(),
-                    size: 4
+                    size: 4,
+                    part_of: GPRegister::RAX,
                 },
                 source: ValueOperand::Immediate { i: 53 },
             })
@@ -606,7 +625,8 @@ mod instruction_parse_test {
             Ok(Instruction::ADD {
                 destination: Register {
                     name: "AL".to_string(),
-                    size: 1
+                    size: 1,
+                    part_of: GPRegister::RAX,
                 },
                 source: ValueOperand::Immediate { i: 122 },
             })
@@ -616,7 +636,8 @@ mod instruction_parse_test {
             Ok(Instruction::ADD {
                 destination: Register {
                     name: "AL".to_string(),
-                    size: 1
+                    size: 1,
+                    part_of: GPRegister::RAX,
                 },
                 source: ValueOperand::Immediate { i: 10 },
             })
@@ -626,7 +647,8 @@ mod instruction_parse_test {
             Ok(Instruction::ADD {
                 destination: Register {
                     name: "AL".to_string(),
-                    size: 1
+                    size: 1,
+                    part_of: GPRegister::RAX,
                 },
                 source: ValueOperand::Immediate { i: 9 },
             })
@@ -640,7 +662,8 @@ mod instruction_parse_test {
             Ok(Instruction::NOTreg {
                 destination: Register {
                     name: "RBX".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RBX,
                 },
             })
         );
@@ -653,7 +676,8 @@ mod instruction_parse_test {
             Ok(Instruction::TEST {
                 src1: Register {
                     name: "RSP".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RSP,
                 },
                 src2: ValueOperand::Immediate { i: 0xf }
             })
@@ -667,7 +691,8 @@ mod instruction_parse_test {
             Ok(Instruction::SUB {
                 destination: Register {
                     name: "RSP".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RSP,
                 },
                 source: ValueOperand::Immediate { i: 8 }
             })
@@ -677,12 +702,14 @@ mod instruction_parse_test {
             Ok(Instruction::SUB {
                 destination: Register {
                     name: "RSP".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RSP,
                 },
                 source: ValueOperand::Register {
                     r: Register {
                         name: "RBX".to_string(),
-                        size: 8
+                        size: 8,
+                        part_of: GPRegister::RBX,
                     },
                 }
             })
@@ -736,7 +763,8 @@ mod instruction_parse_test {
             Ok(Instruction::LEA {
                 destination: Register {
                     name: "RSI".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RSI,
                 },
                 source: ValueOperand::Memory {
                     label: ".LCharacter".to_string(),
@@ -811,11 +839,13 @@ mod instruction_parse_test {
             Ok(Instruction::XORreg {
                 destination: Register {
                     name: "RAX".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RAX,
                 },
                 source: Register {
                     name: "RAX".to_string(),
-                    size: 8
+                    size: 8,
+                    part_of: GPRegister::RAX,
                 },
             }),
         );
@@ -961,7 +991,7 @@ fn parse_as_memory_operand(expr: &str) -> Result<ValueOperand, String> {
 
 #[cfg(test)]
 mod memory_operands {
-    use crate::parser::registers::Register;
+    use crate::parser::registers::{GPRegister, Register};
 
     use super::{parse_as_memory_operand, ValueOperand};
 
@@ -973,6 +1003,7 @@ mod memory_operands {
                 register: Register {
                     name: "RAX".to_string(),
                     size: 8,
+                    part_of: GPRegister::RAX,
                 },
                 size: 0
             })

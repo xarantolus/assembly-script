@@ -277,12 +277,17 @@ pub enum ValueOperand {
     DynamicMemory { register: Register, size: i8 },
 }
 
-fn parse_label(label: String) -> Result<JumpTarget, String> {
+pub fn parse_label(label: String) -> Result<JumpTarget, String> {
+    let split: Vec<&str> = label.split_ascii_whitespace().collect();
+    if split.len() != 1 {
+        return Err(format!("Cannot parse label with spaces: {}", label));
+    }
+
     match Register::parse(label.to_string()) {
         Ok(_) => Err("cannot use register as label".to_string()),
         Err(_) => {
             let ends = &['b', 'f'][..];
-            if label.ends_with(ends) {
+            if label.ends_with(ends) && label[..label.len() - 1].parse::<i8>().is_ok() {
                 return Ok(JumpTarget::Relative {
                     forwards: label.ends_with("f"),
                     label: label[..label.len() - 1].to_string(),
@@ -291,6 +296,37 @@ fn parse_label(label: String) -> Result<JumpTarget, String> {
                 return Ok(JumpTarget::Absolute { label: label });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod parse_label_test {
+    #[test]
+    fn parse_relative_labels() {
+        assert_eq!(
+            super::parse_label("1b".to_string()),
+            Ok(super::JumpTarget::Relative {
+                forwards: false,
+                label: "1".to_string()
+            })
+        );
+        assert_eq!(
+            super::parse_label("2f".to_string()),
+            Ok(super::JumpTarget::Relative {
+                forwards: true,
+                label: "2".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn parse_normal_labels() {
+        assert_eq!(
+            super::parse_label("3".to_string()),
+            Ok(super::JumpTarget::Absolute {
+                label: "3".to_string()
+            })
+        );
     }
 }
 

@@ -17,7 +17,7 @@ phf = { version = "0.10", features = ["macros"] }
 regex = "1.5.6"
 lazy_static = "1.4.0"
 rand = "0.8.5"
-iced-x86 = { version = "1.17.0", default-features = false, features = ["std", "encoder", "block_encoder"] }
+iced-x86 = { version = "1.17.0", default-features = false, features = ["std", "encoder", "code_asm"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

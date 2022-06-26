@@ -2,6 +2,8 @@ use std::fmt;
 
 use crate::parser::instructions::{parse_instruction, Instruction};
 
+use super::instructions::{self, JumpTarget};
+
 #[derive(PartialEq, Debug)]
 pub struct InputFile {
     pub parsed_lines: Vec<LineType>,
@@ -16,7 +18,7 @@ enum Section {
 
 #[derive(Debug, PartialEq)]
 pub enum LineType {
-    Label { name: String },
+    Label { l: JumpTarget },
     Instruction { i: Instruction },
 }
 
@@ -106,7 +108,7 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Parse
 
 #[cfg(test)]
 mod test_gnu_as_parser {
-    use crate::parser::instructions::{Instruction, ValueOperand};
+    use crate::parser::instructions::{Instruction, ValueOperand, JumpTarget};
     use crate::parser::registers::GPRegister;
     use crate::parser::{
         input::{InputFile, LineType},
@@ -135,7 +137,9 @@ mod test_gnu_as_parser {
             InputFile {
                 parsed_lines: vec![
                     LineType::Label {
-                        name: "label".to_string()
+                        l: JumpTarget::Absolute {
+                            label: "label".to_string()
+                        },
                     },
                     LineType::Instruction {
                         i: Instruction::MOV {
@@ -179,7 +183,9 @@ mod test_gnu_as_parser {
             InputFile {
                 parsed_lines: vec![
                     LineType::Label {
-                        name: "label".to_string()
+                        l: JumpTarget::Absolute {
+                            label: "label".to_string()
+                        },
                     },
                     LineType::Instruction {
                         i: Instruction::MOV {
@@ -247,7 +253,9 @@ mod test_gnu_as_parser {
             InputFile {
                 parsed_lines: vec![
                     LineType::Label {
-                        name: "label".to_string()
+                        l: JumpTarget::Absolute {
+                            label: "label".to_string()
+                        },
                     },
                     LineType::Instruction {
                         i: Instruction::CALLlabel {
@@ -279,28 +287,23 @@ fn parse_section(line: &str) -> Result<Section, String> {
 }
 
 fn parse_label(line: &str) -> Result<LineType, String> {
-    let split: Vec<&str> = line.split_whitespace().collect();
-
-    if split.len() != 1 {
-        return Err(format!("invalid label line {}", line));
-    }
-
-    let line_str = line.trim_end_matches(":");
     return Ok(LineType::Label {
-        name: line_str[..line_str.len()].to_string(),
+        l: instructions::parse_label(line.trim_end_matches(':').to_string())?,
     });
 }
 
 #[cfg(test)]
 mod label_parser_test {
-    use crate::parser::input::{parse_label, LineType};
+    use crate::parser::{input::{parse_label, LineType}, instructions::JumpTarget};
 
     #[test]
     fn happy() {
         assert_eq!(
             parse_label(".test:"),
             Ok(LineType::Label {
-                name: ".test".to_string()
+                l: JumpTarget::Absolute {
+                    label: ".test".to_string(),
+                }
             })
         );
     }
@@ -309,7 +312,7 @@ mod label_parser_test {
     fn err() {
         assert_eq!(
             parse_label("t e s t:"),
-            Err("invalid label line t e s t:".to_string())
+            Err("Cannot parse label with spaces: t e s t".to_string())
         );
     }
 }

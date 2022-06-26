@@ -1,16 +1,13 @@
 use phf::phf_map;
 use std::{cell::Cell, collections::HashMap};
 
-use iced_x86::{
-    BlockEncoder, BlockEncoderOptions, Code, IcedError, Instruction, InstructionBlock,
-    MemoryOperand, Register,
-};
+use iced_x86::{code_asm::*, Register};
 use lazy_static::lazy_static;
 
 use crate::parser::{
     input::{InputFile, LineType},
     instructions,
-    instructions::ValueOperand,
+    instructions::{JumpCondition, JumpTarget, ValueOperand},
     registers,
 };
 
@@ -32,28 +29,20 @@ pub fn encode_file(
     instr_start_address: u64,
     data_start_address: u64,
 ) -> Result<EncodeResult, String> {
-    let instructions: &mut Vec<Instruction> = &mut vec![];
+    let mut assembler = CodeAssembler::new(64).map_err(iced_err_to_string)?;
 
-    // Maps a label name to an instruction index
-    let mut label_map: HashMap<String, usize> = HashMap::new();
-
-    let mut add = |i: Result<Instruction, IcedError>| -> Result<(), String> {
-        instructions.push(i.map_err(iced_err_to_string)?);
-        Ok(())
-    };
+    // Maps a label line index to the instruction address
+    let mut named_labels: HashMap<String, Cell<CodeLabel>> = HashMap::new();
 
     // data_section maps a data label name to its offset and data size
     let mut data_section: Vec<(String, i64, i8)> = vec![];
     let mut next_data_section_offset = 0;
 
-    let mut labeled_mem_operand = |label: String, size: i8| -> Result<MemoryOperand, String> {
+    let mut labeled_mem_operand = |label: String, size: i8| -> Result<AsmMemoryOperand, String> {
         match data_section.iter().find(|(l, _, _)| label.eq(l)) {
             Some((_, offset, s)) => {
                 if size.eq(s) {
-                    Ok(MemoryOperand::with_displ(
-                        data_start_address + offset.clone() as u64,
-                        64,
-                    ))
+                    Ok(ptr(data_start_address + offset.clone() as u64))
                 } else {
                     Err(
                         format!("data label {} has size {} but expected {}", label, s, size)
@@ -62,10 +51,7 @@ pub fn encode_file(
                 }
             }
             None => {
-                let next = MemoryOperand::with_displ(
-                    data_start_address + next_data_section_offset as u64,
-                    64,
-                );
+                let next = ptr(data_start_address + next_data_section_offset as u64);
                 data_section.push((label, next_data_section_offset, size));
                 next_data_section_offset += i64::from(size);
 
@@ -76,154 +62,94 @@ pub fn encode_file(
 
     for (idx, line) in input.parsed_lines.iter().enumerate() {
         match line {
-            LineType::Label { name } => match label_map.get(name) {
-                Some(_) => {
-                    return Err(format!("Label {} defined twice", name).to_string());
+            LineType::Label { l } => match l.clone() {
+                JumpTarget::Absolute { label: name } => {
+                    // Get or create this label
+                    let mut label = match named_labels.get(&name) {
+                        Some(l) => l.to_owned(),
+                        None => Cell::new(assembler.create_label()),
+                    };
+
+                    // Now set this label to the current line
+                    assembler
+                        .set_label(label.get_mut())
+                        .map_err(iced_err_to_string)?;
+
+                    // Create a zero-byte instruction for this to prevent conflicts on multiple labels after each other
+                    assembler.zero_bytes().map_err(iced_err_to_string)?;
+
+                    named_labels.insert(name, label.to_owned());
                 }
-                None => {
-                    // We haven't seen this label before, so we create a new one (pointing to the next line)
-                    label_map.insert(name.clone(), idx + 1);
+                JumpTarget::Relative {
+                    label: _,
+                    forwards: _,
+                } => {
+                    assembler.anonymous_label().map_err(iced_err_to_string)?;
+                    assembler.zero_bytes().map_err(iced_err_to_string)?;
                 }
             },
             LineType::Instruction { i } => match i {
-                instructions::Instruction::MOV {
-                    destination,
-                    source,
-                } => match (destination, source) {
-                    (ValueOperand::Register { r: dst }, ValueOperand::Register { r: src }) => {
-                        add(Instruction::with2(
-                            Code::Mov_r64_rm64,
-                            REGISTERS.get(&dst.name.as_str()).unwrap().clone(),
-                            REGISTERS.get(&src.name.as_str()).unwrap().clone(),
-                        ))?;
-                    }
-                    (ValueOperand::Register { r: dst }, ValueOperand::Immediate { i }) => {
-                        add(Instruction::with2(
-                            Code::Mov_r64_imm64,
-                            REGISTERS.get(&dst.name.as_str()).unwrap().clone(),
-                            i.clone(),
-                        ))?;
-                    }
-                    (ValueOperand::Memory { label, size }, ValueOperand::Immediate { i }) => {
-                        match size.clone() {
-                            1 => add(Instruction::with2(
-                                Code::Mov_rm8_imm8,
-                                labeled_mem_operand(label.clone(), size.clone())?,
-                                *i as i32,
-                            ))?,
-                            2 => add(Instruction::with2(
-                                Code::Mov_rm16_imm16,
-                                labeled_mem_operand(label.clone(), size.clone())?,
-                                *i as i32,
-                            ))?,
-                            4 => add(Instruction::with2(
-                                Code::Mov_rm32_imm32,
-                                labeled_mem_operand(label.clone(), size.clone())?,
-                                *i as i32,
-                            ))?,
-                            _ => {
-                                return Err(format!(
-                                    "Unsupported immediate size {} for MOV",
-                                    size.clone()
-                                )
-                                .to_string());
+                instructions::Instruction::JMPlabel { target, condition } => {
+                    let target_label = match target {
+                        JumpTarget::Absolute { label: name } => match named_labels.get(name) {
+                            Some(label) => label.to_owned(),
+                            None => {
+                                let new_label = Cell::new(assembler.create_label());
+                                named_labels.insert(name.to_owned(), new_label.to_owned());
+                                new_label
                             }
+                        },
+                        JumpTarget::Relative { label: _, forwards } => Cell::new(
+                            (if forwards.to_owned() {
+                                assembler.fwd()
+                            } else {
+                                assembler.bwd()
+                            })
+                            .map_err(iced_err_to_string)?,
+                        ),
+                    };
+
+                    match condition.to_owned() {
+                        JumpCondition::None => {
+                            assembler
+                                .jmp(target_label.get())
+                                .map_err(iced_err_to_string)?;
+                        }
+                        JumpCondition::Greater => {
+                            assembler
+                                .jg(target_label.get())
+                                .map_err(iced_err_to_string)?;
+                        }
+                        JumpCondition::Less => {
+                            assembler
+                                .jl(target_label.get())
+                                .map_err(iced_err_to_string)?;
+                        }
+                        JumpCondition::ZeroEqual => {
+                            assembler
+                                .je(target_label.get())
+                                .map_err(iced_err_to_string)?;
+                        }
+                        _ => {
+                            return Err(
+                                format!("unsupported jump condition: {:?}", condition).to_string()
+                            );
                         }
                     }
-                    (ValueOperand::Memory { label, size }, ValueOperand::Register { r }) => {
-                        match r.size {
-                            1 => {
-                                add(Instruction::with2(
-                                    Code::Mov_rm8_r8,
-                                    labeled_mem_operand(label.clone(), size.clone())?,
-                                    REGISTERS.get(&r.name.as_str()).unwrap().clone(),
-                                ))?;
-                            }
-                            2 => {
-                                add(Instruction::with2(
-                                    Code::Mov_rm16_r16,
-                                    labeled_mem_operand(label.clone(), size.clone())?,
-                                    REGISTERS.get(&r.name.as_str()).unwrap().clone(),
-                                ))?;
-                            }
-                            4 => {
-                                add(Instruction::with2(
-                                    Code::Mov_rm32_r32,
-                                    labeled_mem_operand(label.clone(), size.clone())?,
-                                    REGISTERS.get(&r.name.as_str()).unwrap().clone(),
-                                ))?;
-                            }
-                            8 => add(Instruction::with2(
-                                Code::Mov_rm64_r64,
-                                labeled_mem_operand(label.clone(), size.clone())?,
-                                REGISTERS.get(&r.name.as_str()).unwrap().clone(),
-                            ))?,
-                            _ => {
-                                return Err(format!(
-                                    "Unsupported register size {} for MOV",
-                                    r.size
-                                )
-                                .to_string());
-                            }
-                        };
-                    }
-                    _ => {
-                        return Err(format!(
-                            "invalid combination of operands for mov: {:?} and {:?}",
-                            destination, source
-                        )
-                        .to_string());
-                    }
-                },
-                // Test instruction for r64, imm64
-                instructions::Instruction::TEST { src1, src2 } => match (src1, src2) {
-                    (dst, ValueOperand::Register { r: src }) => {
-                        add(Instruction::with2(
-                            Code::Test_rm64_r64,
-                            REGISTERS.get(&dst.name.as_str()).unwrap().clone(),
-                            REGISTERS.get(&src.name.as_str()).unwrap().clone(),
-                        ))?;
-                    }
-                    (dst, ValueOperand::Immediate { i }) => {
-                        add(Instruction::with2(
-                            Code::Test_rm64_imm32,
-                            REGISTERS.get(&dst.name.as_str()).unwrap().clone(),
-                            i.clone(),
-                        ))?;
-                    }
-                    _ => {
-                        return Err(format!(
-                            "invalid combination of operands for test: {:?} and {:?}",
-                            src1, src2
-                        )
-                        .to_string());
-                    }
-                },
-
-                // TODO: Figure out how to reference labels, so they only get turned into addresses at the end
-                // instructions::Instruction::CALLlabel { label } => {
-                //     Instruction::with1(Code::Call, target)
-                // }
-                instructions::Instruction::SYSCALL {} => {
-                    add(Ok(Instruction::with(Code::Syscall)))?;
-                }
-                instructions::Instruction::RET {} => {
-                    add(Ok(Instruction::with(Code::Retnq)))?;
                 }
                 _ => {
-                    panic!("unimplemented instruction {:?}", line)
+                    todo!()
                 }
             },
         }
     }
 
-    let block = InstructionBlock::new(&instructions, instr_start_address);
-
-    let result =
-        BlockEncoder::encode(64, block, BlockEncoderOptions::NONE).map_err(iced_err_to_string)?;
+    let result = assembler
+        .assemble(instr_start_address)
+        .map_err(iced_err_to_string)?;
 
     return Ok(EncodeResult {
-        code: result.code_buffer,
+        code: result,
         first_instr_address: instr_start_address,
         data_start_address,
         data_section_size: 0,
@@ -235,9 +161,9 @@ mod test_encoder {
     use crate::{
         encoder::encoder::encode_file,
         parser::{
-            input,
-            instructions::{Instruction, ValueOperand},
-            registers,
+            input::{self, LineType},
+            instructions::{Instruction, JumpCondition, JumpTarget, ValueOperand},
+            registers::{self, Register},
         },
     };
 
@@ -247,16 +173,80 @@ mod test_encoder {
             .map(|instr: &Instruction| input::LineType::Instruction { i: instr.clone() })
             .collect();
 
+        assert_encoding_lines(input_lines, u);
+    }
+
+    fn assert_encoding_lines(i: Vec<LineType>, u: Vec<u8>) {
         let encode_res = encode_file(
-            crate::parser::input::InputFile {
-                parsed_lines: input_lines,
-            },
+            crate::parser::input::InputFile { parsed_lines: i },
             0x2000,
             0x1000,
         );
         assert!(encode_res.is_ok(), "{}", encode_res.err().unwrap());
 
         assert_eq!(encode_res.unwrap().code, u);
+    }
+
+    #[test]
+    fn jumps() {
+        assert_encoding_lines(
+            vec![
+                LineType::Label {
+                    l: JumpTarget::Absolute {
+                        label: "label".to_owned(),
+                    },
+                },
+                LineType::Instruction {
+                    i: Instruction::JMPlabel {
+                        target: JumpTarget::Absolute {
+                            label: "label".to_owned(),
+                        },
+                        condition: JumpCondition::None,
+                    },
+                },
+            ],
+            vec![0xeb, 0xfe],
+        );
+
+        assert_encoding_lines(
+            vec![
+                LineType::Label {
+                    l: JumpTarget::Absolute {
+                        label: "label".to_owned(),
+                    },
+                },
+                LineType::Instruction {
+                    i: Instruction::MOV {
+                        destination: ValueOperand::Register {
+                            r: Register {
+                                name: "RBX".to_string(),
+                                size: 8,
+                                part_of: registers::GPRegister::RBX,
+                            },
+                        },
+                        source: ValueOperand::Register {
+                            r: Register {
+                                name: "RDI".to_string(),
+                                size: 8,
+                                part_of: registers::GPRegister::RDI,
+                            },
+                        },
+                    },
+                },
+                LineType::Instruction {
+                    i: Instruction::JMPlabel {
+                        target: JumpTarget::Absolute {
+                            label: "label".to_owned(),
+                        },
+                        condition: JumpCondition::None,
+                    },
+                },
+            ],
+            vec![
+                0x48, 0x89, 0xf3, // MOV RBX, RDI
+                0xeb, 0xfe, // JMP label
+            ],
+        );
     }
 
     #[test]

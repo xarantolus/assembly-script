@@ -20,6 +20,7 @@ pub enum LineType {
     Instruction { i: Instruction },
 }
 
+#[derive(Debug)]
 pub struct ParseError {
     line_number: i64,
     line_text: String,

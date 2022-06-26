@@ -1,11 +1,11 @@
 use crate::parser::registers::Register;
 use phf::phf_map;
 use regex::Regex;
-use std::vec;
+use std::{fmt, vec};
 use unescape::unescape;
 
 use lazy_static::lazy_static;
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Instruction {
     MOV {
         destination: ValueOperand,
@@ -78,13 +78,18 @@ pub enum Instruction {
     // TODO: call label, ret, jmp, jl jg jz, syscall, lea
 }
 
-#[derive(PartialEq, Debug)]
+impl fmt::Display for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+#[derive(PartialEq, Debug, Clone)]
 pub enum JumpTarget {
     Relative { forwards: bool, label: String },
     Absolute { label: String },
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum JumpCondition {
     None,
     ZeroEqual,
@@ -264,7 +269,7 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum ValueOperand {
     Register { r: Register },
     Immediate { i: i64 },

@@ -1,6 +1,6 @@
 use phf::phf_map;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Register {
     pub name: String,
     pub size: i8,

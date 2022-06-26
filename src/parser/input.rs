@@ -158,6 +158,77 @@ mod test_gnu_as_parser {
     }
 
     #[test]
+    fn simple_2() {
+        let res = parse_gnu_as_input(
+            r#"
+        .text
+        label:
+        mov rax, 0
+        push rax
+        add rax, rax
+        ret
+        "#
+            .to_string(),
+        );
+        assert!(res.is_ok());
+
+        let parsed = res.ok().unwrap();
+
+        assert_eq!(
+            parsed,
+            InputFile {
+                parsed_lines: vec![
+                    LineType::Label {
+                        name: "label".to_string()
+                    },
+                    LineType::Instruction {
+                        i: Instruction::MOV {
+                            destination: ValueOperand::Register {
+                                r: Register {
+                                    name: "RAX".to_string(),
+                                    size: 8,
+                                    part_of: GPRegister::RAX,
+                                }
+                            },
+                            source: ValueOperand::Immediate { i: 0 }
+                        }
+                    },
+                    LineType::Instruction {
+                        i: Instruction::PUSH {
+                            source: ValueOperand::Register {
+                                r: Register {
+                                    name: "RAX".to_string(),
+                                    size: 8,
+                                    part_of: GPRegister::RAX,
+                                }
+                            }
+                        }
+                    },
+                    LineType::Instruction {
+                        i: Instruction::ADD {
+                            destination: Register {
+                                name: "RAX".to_string(),
+                                size: 8,
+                                part_of: GPRegister::RAX,
+                            },
+                            source: ValueOperand::Register {
+                                r: Register {
+                                    name: "RAX".to_string(),
+                                    size: 8,
+                                    part_of: GPRegister::RAX,
+                                }
+                            }
+                        }
+                    },
+                    LineType::Instruction {
+                        i: Instruction::RET {}
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
     fn simple_call() {
         let res = parse_gnu_as_input(
             r#"

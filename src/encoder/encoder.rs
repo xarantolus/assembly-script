@@ -38,14 +38,11 @@ pub fn encode_file(
     let mut data_section: Vec<(String, i64, i8)> = vec![];
     let mut next_data_section_offset = 0;
 
-    let mut labeled_mem_operand = |label: String, size: i8| -> Result<AsmMemoryOperand, String> {
+    let mut labeled_mem_operand = |label: String, size: i8| -> Result<u64, String> {
         match data_section.iter().find(|(l, _, _)| label.eq(l)) {
             Some((_, offset, s)) => {
                 if size.eq(s) {
-                    Ok(MemoryOperand::with_displ(
-                        data_start_address + offset.clone() as u64,
-                        32,
-                    ))
+                    Ok(data_start_address + offset.clone() as u64)
                 } else {
                     Err(
                         format!("data label {} has size {} but expected {}", label, s, size)
@@ -54,10 +51,7 @@ pub fn encode_file(
                 }
             }
             None => {
-                let next = MemoryOperand::with_displ(
-                    data_start_address + next_data_section_offset as u64,
-                    32,
-                );
+                let next = data_start_address + next_data_section_offset as u64;
                 data_section.push((label, next_data_section_offset, size));
                 next_data_section_offset += i64::from(size);
 
@@ -108,7 +102,7 @@ pub fn encode_file(
                                 ValueOperand::Register { r } => match r.size.to_owned() {
                                     1 => assembler
                                         .mov(
-                                            labeled_mem_operand(label, size)?,
+                                            byte_ptr(labeled_mem_operand(label, size)?),
                                             gpr8::get_gpr8(
                                                 REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
                                             )
@@ -120,7 +114,7 @@ pub fn encode_file(
                                         .map_err(iced_err_to_string)?,
                                     2 => assembler
                                         .mov(
-                                            labeled_mem_operand(label, size)?,
+                                            word_ptr(labeled_mem_operand(label, size)?),
                                             gpr16::get_gpr16(
                                                 REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
                                             )
@@ -132,7 +126,7 @@ pub fn encode_file(
                                         .map_err(iced_err_to_string)?,
                                     4 => assembler
                                         .mov(
-                                            labeled_mem_operand(label, size)?,
+                                            word_ptr(labeled_mem_operand(label, size)?),
                                             gpr32::get_gpr32(
                                                 REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
                                             )
@@ -144,7 +138,7 @@ pub fn encode_file(
                                         .map_err(iced_err_to_string)?,
                                     8 => assembler
                                         .mov(
-                                            labeled_mem_operand(label, size)?,
+                                            qword_ptr(labeled_mem_operand(label, size)?),
                                             gpr64::get_gpr64(
                                                 REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
                                             )
@@ -160,8 +154,14 @@ pub fn encode_file(
                                     }
                                 },
                                 ValueOperand::Immediate { i } => match size.to_owned() {
-                                    1 | 2 | 4 => assembler
-                                        .mov(labeled_mem_operand(label, size)?, i as i32)
+                                    1 => assembler
+                                        .mov(byte_ptr(labeled_mem_operand(label, size)?), i as i32)
+                                        .map_err(iced_err_to_string)?,
+                                    2 => assembler
+                                        .mov(word_ptr(labeled_mem_operand(label, size)?), i as i32)
+                                        .map_err(iced_err_to_string)?,
+                                    4 => assembler
+                                        .mov(dword_ptr(labeled_mem_operand(label, size)?), i as i32)
                                         .map_err(iced_err_to_string)?,
                                     _ => {
                                         return Err(format!("Invalid immediate size {:?}", size)

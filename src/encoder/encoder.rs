@@ -1,7 +1,7 @@
 use phf::phf_map;
 use std::{cell::Cell, collections::HashMap};
 
-use iced_x86::{code_asm::*, Register};
+use iced_x86::{code_asm::*, MemoryOperand, Register};
 use lazy_static::lazy_static;
 
 use crate::parser::{
@@ -12,7 +12,7 @@ use crate::parser::{
 };
 
 fn iced_err_to_string(e: IcedError) -> String {
-    return format!("{}", e).to_string();
+    return format!("iced: {}", e).to_string();
 }
 
 #[derive(Debug, Clone)]
@@ -42,7 +42,10 @@ pub fn encode_file(
         match data_section.iter().find(|(l, _, _)| label.eq(l)) {
             Some((_, offset, s)) => {
                 if size.eq(s) {
-                    Ok(ptr(data_start_address + offset.clone() as u64))
+                    Ok(MemoryOperand::with_displ(
+                        data_start_address + offset.clone() as u64,
+                        32,
+                    ))
                 } else {
                     Err(
                         format!("data label {} has size {} but expected {}", label, s, size)
@@ -51,7 +54,10 @@ pub fn encode_file(
                 }
             }
             None => {
-                let next = ptr(data_start_address + next_data_section_offset as u64);
+                let next = MemoryOperand::with_displ(
+                    data_start_address + next_data_section_offset as u64,
+                    32,
+                );
                 data_section.push((label, next_data_section_offset, size));
                 next_data_section_offset += i64::from(size);
 
@@ -89,6 +95,97 @@ pub fn encode_file(
                 }
             },
             LineType::Instruction { i } => match i {
+                // mov for all combinations of memory operands, registers and immediates with a nested match statement
+                instructions::Instruction::MOV {
+                    destination: dst,
+                    source: src,
+                } => {
+                    match dst.to_owned() {
+                        // Implement mov for memory and register destinations
+                        ValueOperand::Memory { label, size } => {
+                            // Move register or immediate to memory
+                            match src.to_owned() {
+                                ValueOperand::Register { r } => match r.size.to_owned() {
+                                    1 => assembler
+                                        .mov(
+                                            labeled_mem_operand(label, size)?,
+                                            gpr8::get_gpr8(
+                                                REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 8-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                        )
+                                        .map_err(iced_err_to_string)?,
+                                    2 => assembler
+                                        .mov(
+                                            labeled_mem_operand(label, size)?,
+                                            gpr16::get_gpr16(
+                                                REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 16-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                        )
+                                        .map_err(iced_err_to_string)?,
+                                    4 => assembler
+                                        .mov(
+                                            labeled_mem_operand(label, size)?,
+                                            gpr32::get_gpr32(
+                                                REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 32-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                        )
+                                        .map_err(iced_err_to_string)?,
+                                    8 => assembler
+                                        .mov(
+                                            labeled_mem_operand(label, size)?,
+                                            gpr64::get_gpr64(
+                                                REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 64-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                        )
+                                        .map_err(iced_err_to_string)?,
+                                    _ => {
+                                        return Err(format!("Invalid register size {:?}", r.size)
+                                            .to_string());
+                                    }
+                                },
+                                ValueOperand::Immediate { i } => match size.to_owned() {
+                                    1 | 2 | 4 => assembler
+                                        .mov(labeled_mem_operand(label, size)?, i as i32)
+                                        .map_err(iced_err_to_string)?,
+                                    _ => {
+                                        return Err(format!("Invalid immediate size {:?}", size)
+                                            .to_string());
+                                    }
+                                },
+                                _ => {
+                                    return Err(format!(
+                                        "mov destination is not a register or immediate"
+                                    )
+                                    .to_string());
+                                }
+                            }
+                        }
+
+                        _ => {
+                            return Err(format!(
+                                "mov destination is not a memory or register operand"
+                            )
+                            .to_string());
+                        }
+                    }
+                }
+
                 instructions::Instruction::JMPlabel { target, condition } => {
                     let target_label = match target {
                         JumpTarget::Absolute { label: name } => match named_labels.get(name) {
@@ -138,7 +235,7 @@ pub fn encode_file(
                     }
                 }
                 _ => {
-                    todo!()
+                    return Err(format!("unsupported instruction: {:?}", i).to_string());
                 }
             },
         }

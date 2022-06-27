@@ -170,22 +170,286 @@ pub fn encode_file(
                                 },
                                 _ => {
                                     return Err(format!(
-                                        "mov destination is not a register or immediate"
+                                        "mov source {:?} is not a register or immediate",
+                                        src,
                                     )
                                     .to_string());
                                 }
                             }
                         }
-
+                        ValueOperand::Register { r: destr } => match dst.clone() {
+                            ValueOperand::Register { r } => match r.size.to_owned() {
+                                1 => {
+                                    assembler
+                                        .mov(
+                                            gpr8::get_gpr8(
+                                                REGISTERS
+                                                    .get(destr.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 8-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                            gpr8::get_gpr8(
+                                                REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 8-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                        )
+                                        .map_err(iced_err_to_string)?;
+                                }
+                                2 => {
+                                    assembler
+                                        .mov(
+                                            gpr16::get_gpr16(
+                                                REGISTERS
+                                                    .get(destr.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 16-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                            gpr16::get_gpr16(
+                                                REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 16-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                        )
+                                        .map_err(iced_err_to_string)?;
+                                }
+                                4 => {
+                                    assembler
+                                        .mov(
+                                            gpr32::get_gpr32(
+                                                REGISTERS
+                                                    .get(destr.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 32-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                            gpr32::get_gpr32(
+                                                REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 32-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                        )
+                                        .map_err(iced_err_to_string)?;
+                                }
+                                8 => {
+                                    assembler
+                                        .mov(
+                                            gpr64::get_gpr64(
+                                                REGISTERS
+                                                    .get(destr.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 64-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                            gpr64::get_gpr64(
+                                                REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 64-bit register {:?}", r)
+                                                    .to_string(),
+                                            )?,
+                                        )
+                                        .map_err(iced_err_to_string)?;
+                                }
+                                _ => {
+                                    return Err(
+                                        format!("Invalid register size {:?}", r.size).to_string()
+                                    );
+                                }
+                            },
+                            ValueOperand::Immediate { i } => match destr.size.to_owned() {
+                                1 => {
+                                    assembler
+                                        .mov(
+                                            gpr8::get_gpr8(
+                                                REGISTERS
+                                                    .get(destr.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 8-bit register {:?}", destr)
+                                                    .to_string(),
+                                            )?,
+                                            i as i32,
+                                        )
+                                        .map_err(iced_err_to_string)?;
+                                }
+                                2 => {
+                                    assembler
+                                        .mov(
+                                            gpr16::get_gpr16(
+                                                REGISTERS
+                                                    .get(destr.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!(
+                                                    "Could not get 16-bit register {:?}",
+                                                    destr
+                                                )
+                                                .to_string(),
+                                            )?,
+                                            i as i32,
+                                        )
+                                        .map_err(iced_err_to_string)?;
+                                }
+                                4 => {
+                                    assembler
+                                        .mov(
+                                            gpr32::get_gpr32(
+                                                REGISTERS
+                                                    .get(destr.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!(
+                                                    "Could not get 32-bit register {:?}",
+                                                    destr
+                                                )
+                                                .to_string(),
+                                            )?,
+                                            i as i32,
+                                        )
+                                        .map_err(iced_err_to_string)?;
+                                }
+                                8 => {
+                                    assembler
+                                        .mov(
+                                            gpr64::get_gpr64(
+                                                REGISTERS
+                                                    .get(destr.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!(
+                                                    "Could not get 64-bit register {:?}",
+                                                    destr
+                                                )
+                                                .to_string(),
+                                            )?,
+                                            i as i64,
+                                        )
+                                        .map_err(iced_err_to_string)?;
+                                }
+                                _ => {
+                                    return Err(format!("Invalid register size {:?}", destr.size)
+                                        .to_string());
+                                }
+                            },
+                            _ => {
+                                return Err(format!(
+                                    "mov destination {:?} is not a register or immediate",
+                                    dst,
+                                )
+                                .to_string());
+                            }
+                        },
                         _ => {
                             return Err(format!(
-                                "mov destination is not a memory or register operand"
+                                "mov destination {:?} is not a memory or register operand",
+                                dst,
                             )
                             .to_string());
                         }
                     }
                 }
 
+                // TEST instruction with two operands: register and immediate operand, e.g. test rsp, 0xf
+                instructions::Instruction::TEST { src1, src2 } => match src2 {
+                    ValueOperand::Immediate { i } => match src1.size.clone() {
+                        1 => {
+                            assembler
+                                .test(
+                                    gpr8::get_gpr8(
+                                        REGISTERS.get(src1.name.as_str()).unwrap().to_owned(),
+                                    )
+                                    .ok_or(
+                                        format!("Could not get 8-bit register {:?}", src1)
+                                            .to_string(),
+                                    )?,
+                                    i.to_owned() as i32,
+                                )
+                                .map_err(iced_err_to_string)?;
+                        }
+                        2 => {
+                            assembler
+                                .test(
+                                    gpr16::get_gpr16(
+                                        REGISTERS.get(src1.name.as_str()).unwrap().to_owned(),
+                                    )
+                                    .ok_or(
+                                        format!("Could not get 16-bit register {:?}", src1)
+                                            .to_string(),
+                                    )?,
+                                    i.to_owned() as i32,
+                                )
+                                .map_err(iced_err_to_string)?;
+                        }
+                        4 => {
+                            assembler
+                                .test(
+                                    gpr32::get_gpr32(
+                                        REGISTERS.get(src1.name.as_str()).unwrap().to_owned(),
+                                    )
+                                    .ok_or(
+                                        format!("Could not get 32-bit register {:?}", src1)
+                                            .to_string(),
+                                    )?,
+                                    i.to_owned() as i32,
+                                )
+                                .map_err(iced_err_to_string)?;
+                        }
+                        8 => {
+                            assembler
+                                .test(
+                                    gpr64::get_gpr64(
+                                        REGISTERS.get(src1.name.as_str()).unwrap().to_owned(),
+                                    )
+                                    .ok_or(
+                                        format!("Could not get 64-bit register {:?}", src1)
+                                            .to_string(),
+                                    )?,
+                                    i.to_owned() as i32,
+                                )
+                                .map_err(iced_err_to_string)?;
+                        }
+                        _ => {
+                            return Err(
+                                format!("Invalid register size {:?}", src1.size).to_string()
+                            );
+                        }
+                    },
+                    _ => {
+                        return Err(format!(
+                            "test: second source operand is not a register or immediate"
+                        )
+                        .to_string());
+                    }
+                },
                 instructions::Instruction::JMPlabel { target, condition } => {
                     let target_label = match target {
                         JumpTarget::Absolute { label: name } => match named_labels.get(name) {

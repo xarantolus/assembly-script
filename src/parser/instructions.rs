@@ -75,7 +75,6 @@ pub enum Instruction {
     RET {},
 
     SYSCALL {},
-    // TODO: call label, ret, jmp, jl jg jz, syscall, lea
 }
 
 impl fmt::Display for Instruction {

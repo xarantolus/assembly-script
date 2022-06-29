@@ -234,6 +234,46 @@ mod test_gnu_as_parser {
     }
 
     #[test]
+    fn mov_rbx_rdi() {
+        let res = parse_gnu_as_input(
+            r#"
+        .text
+        mov rbx, rdi
+        "#
+            .to_string(),
+        );
+        assert!(res.is_ok());
+
+        let parsed = res.ok().unwrap();
+
+        assert_eq!(
+            parsed,
+            InputFile {
+                parsed_lines: vec![
+                    LineType::Instruction {
+                        i: Instruction::MOV {
+                            destination: ValueOperand::Register {
+                                r: Register {
+                                    name: "RBX".to_string(),
+                                    size: 8,
+                                    part_of: GPRegister::RBX,
+                                }
+                            },
+                            source: ValueOperand::Register {
+                                r: Register {
+                                    name: "RDI".to_string(),
+                                    size: 8,
+                                    part_of: GPRegister::RDI,
+                                }
+                            }
+                        }
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
     fn parse_relative_labels() {
         let res = parse_gnu_as_input(
             r#"

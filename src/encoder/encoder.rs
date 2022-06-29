@@ -78,18 +78,27 @@ pub fn encode_file(
     let mut data_section: Vec<DataSectionEntry> = vec![];
     let mut next_data_section_offset = 0;
 
-    let mut labeled_mem_operand = |label: String, size: u8| -> Result<u64, EncodeError> {
+    let mut labeled_mem_operand = |label: String, mut size: u8| -> Result<u64, EncodeError> {
         match data_section.iter().find(|e| label.eq(e.label.as_str())) {
             Some(entry) => {
-                if size == entry.size {
+                if size == 0 || size == entry.size {
                     Ok(data_start_address + entry.offset.clone())
                 } else {
                     Err(EncodeError::StrError {
-                        e: format!("data label {} has size {} but expected {}", label, entry.size, size),
+                        e: format!(
+                            "data label {} has size {} but expected {}",
+                            label, entry.size, size
+                        ),
                     })
                 }
             }
             None => {
+                // If no size is set, we just reserve 8 byte and hope for the best.
+                // This *can* happen with lea instructions
+                if size == 0 {
+                    size = 8;
+                }
+
                 let next = data_start_address + next_data_section_offset as u64;
                 data_section.push(DataSectionEntry {
                     label: label.clone(),
@@ -715,6 +724,355 @@ pub fn encode_file(
                         ))?;
                     }
                 },
+                instructions::Instruction::CMP {
+                    src1: register,
+                    src2,
+                } => match src2 {
+                    ValueOperand::Immediate { i } => match register.size.clone() {
+                        1 => {
+                            assembler.cmp(
+                                gpr8::get_gpr8(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 8-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                i.clone() as i32,
+                            )?;
+                        }
+                        2 => {
+                            assembler.cmp(
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                i.clone() as i32,
+                            )?;
+                        }
+                        4 => {
+                            assembler.cmp(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                i.clone() as i32,
+                            )?;
+                        }
+                        8 => {
+                            assembler.cmp(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                i.clone() as i32,
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid register size {:?}", register.size))?;
+                        }
+                    },
+                    ValueOperand::Register { r } => match register.size.clone() {
+                        1 => {
+                            assembler.cmp(
+                                gpr8::get_gpr8(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 8-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                gpr8::get_gpr8(REGISTERS.get(r.name.as_str()).unwrap().to_owned())
+                                    .ok_or(
+                                        format!("Could not get 8-bit register {:?}", r).to_string(),
+                                    )?,
+                            )?;
+                        }
+                        2 => {
+                            assembler.cmp(
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", r).to_string(),
+                                )?,
+                            )?;
+                        }
+                        4 => {
+                            assembler.cmp(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", r).to_string(),
+                                )?,
+                            )?;
+                        }
+                        8 => {
+                            assembler.cmp(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", r).to_string(),
+                                )?,
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid register size {:?}", register.size))?;
+                        }
+                    },
+                    ValueOperand::Memory { label, size } => match register.size.clone() {
+                        1 => {
+                            assembler.cmp(
+                                gpr8::get_gpr8(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 8-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                byte_ptr(labeled_mem_operand(label.clone(), size.clone())?),
+                            )?;
+                        }
+                        2 => {
+                            assembler.cmp(
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                word_ptr(labeled_mem_operand(label.clone(), size.clone())?),
+                            )?;
+                        }
+                        4 => {
+                            assembler.cmp(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                dword_ptr(labeled_mem_operand(label.clone(), size.clone())?),
+                            )?;
+                        }
+                        8 => {
+                            assembler.cmp(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", register)
+                                        .to_string(),
+                                )?,
+                                qword_ptr(labeled_mem_operand(label.clone(), size.clone())?),
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid register size {:?}", register.size))?;
+                        }
+                    },
+                    _ => {
+                        strerror(format!(
+                            "cmp: second source operand is not a register or immediate"
+                        ))?;
+                    }
+                },
+                instructions::Instruction::XORreg {
+                    destination,
+                    source,
+                } => {
+                    if destination.size != source.size {
+                        strerror(format!("XOR: operand sizes do not match"))?;
+                    }
+
+                    match destination.size.clone() {
+                        1 => {
+                            assembler.xor(
+                                gpr8::get_gpr8(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 8-bit register {:?}", destination)
+                                        .to_string(),
+                                )?,
+                                gpr8::get_gpr8(
+                                    REGISTERS.get(source.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 8-bit register {:?}", source)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        2 => {
+                            assembler.xor(
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", destination)
+                                        .to_string(),
+                                )?,
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(source.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", source)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        4 => {
+                            assembler.xor(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", destination)
+                                        .to_string(),
+                                )?,
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(source.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", source)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        8 => {
+                            assembler.xor(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", destination)
+                                        .to_string(),
+                                )?,
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(source.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", source)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid register size {:?}", destination.size))?;
+                        }
+                    }
+                }
+                instructions::Instruction::PUSH { source } => match source {
+                    ValueOperand::Register { r } => match r.size.clone() {
+                        2 => {
+                            assembler.push(
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", r.name)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        4 => {
+                            assembler.push(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", r.name)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        8 => {
+                            assembler.push(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", r.name)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("push: Invalid register size {:?}", r.size))?;
+                        }
+                    },
+                    // Maybe immediates should also be supported
+                    _ => {
+                        strerror(format!("push: source operand is not a register"))?;
+                    }
+                },
+                instructions::Instruction::POP { destination: r } => match r.size.clone() {
+                    2 => {
+                        assembler.pop(
+                            gpr16::get_gpr16(REGISTERS.get(r.name.as_str()).unwrap().to_owned())
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", r.name)
+                                        .to_string(),
+                                )?,
+                        )?;
+                    }
+                    4 => {
+                        assembler.pop(
+                            gpr32::get_gpr32(REGISTERS.get(r.name.as_str()).unwrap().to_owned())
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", r.name)
+                                        .to_string(),
+                                )?,
+                        )?;
+                    }
+                    8 => {
+                        assembler.pop(
+                            gpr64::get_gpr64(REGISTERS.get(r.name.as_str()).unwrap().to_owned())
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", r.name)
+                                        .to_string(),
+                                )?,
+                        )?;
+                    }
+                    _ => {
+                        strerror(format!("pop: Invalid register size {:?}", r.size))?;
+                    }
+                },
                 instructions::Instruction::JMPlabel { target, condition } => {
                     let target_label = match target {
                         JumpTarget::Absolute { label: name } => match named_labels.get(name) {
@@ -753,6 +1111,32 @@ pub fn encode_file(
                     }
                 }
 
+                instructions::Instruction::LEA {
+                    destination,
+                    source,
+                } => match source {
+                    ValueOperand::Memory { label, size } => {
+                        if destination.size != 8 {
+                            strerror(format!(
+                                "lea: Invalid register size {:?}, must be 8",
+                                destination.size
+                            ))?;
+                        }
+                        assembler.mov(
+                            gpr64::get_gpr64(
+                                REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                            )
+                            .ok_or(
+                                format!("Could not get 64-bit register {:?}", destination)
+                                    .to_string(),
+                            )?,
+                            labeled_mem_operand(label.to_owned(), 0)? as u64,
+                        )?;
+                    }
+                    _ => {
+                        strerror(format!("unsupported lea source operand: {:?}", source))?;
+                    }
+                },
                 instructions::Instruction::CALLlabel { label: target } => {
                     let target_label = match named_labels.get(target) {
                         Some(label) => label.to_owned(),
@@ -821,6 +1205,29 @@ mod test_encoder {
     }
 
     #[test]
+    fn mov_reg_encoding() {
+        assert_encoding(
+            vec![Instruction::MOV {
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "RBX".to_string(),
+                        size: 8,
+                        part_of: registers::GPRegister::RBX,
+                    },
+                },
+                source: ValueOperand::Register {
+                    r: Register {
+                        name: "RDI".to_string(),
+                        size: 8,
+                        part_of: registers::GPRegister::RDI,
+                    },
+                },
+            }],
+            vec![0x48, 0x89, 0xfb],
+        );
+    }
+
+    #[test]
     fn jumps() {
         assert_encoding_lines(
             vec![
@@ -876,8 +1283,8 @@ mod test_encoder {
                 },
             ],
             vec![
-                0x48, 0x89, 0xf3, // MOV RBX, RDI
-                0xeb, 0xfe, // JMP label
+                0x48, 0x89, 0xfb, // MOV RBX, RDI
+                0xeb, 0xfb, // JMP label
             ],
         );
     }

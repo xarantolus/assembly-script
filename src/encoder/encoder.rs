@@ -1,7 +1,8 @@
 use phf::phf_map;
 use std::{cell::Cell, collections::HashMap, fmt};
+use wasm_bindgen::prelude::wasm_bindgen;
 
-use iced_x86::{code_asm::*, MemoryOperand, Register};
+use iced_x86::{code_asm::*, BlockEncoderOptions, MemoryOperand, Register};
 use lazy_static::lazy_static;
 
 use crate::parser::{
@@ -49,15 +50,20 @@ impl From<&str> for EncodeError {
     }
 }
 
+#[wasm_bindgen]
 #[derive(Debug, Clone)]
 pub struct EncodeResult {
     code: Vec<u8>,
-    first_instr_address: u64,
+    code_start_address: u64,
+    entrypoint_address: u64,
 
     data_start_address: u64,
     data_section_size: u64,
+    data_section: Vec<DataSectionEntry>,
 }
 
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
 pub struct DataSectionEntry {
     label: String,
     offset: u64,
@@ -68,6 +74,7 @@ pub fn encode_file(
     input: InputFile,
     instr_start_address: u64,
     data_start_address: u64,
+    entrypoint_name: Option<String>,
 ) -> Result<EncodeResult, EncodeError> {
     let mut assembler = CodeAssembler::new(64)?;
 
@@ -1163,12 +1170,30 @@ pub fn encode_file(
         }
     }
 
-    let result = assembler.assemble(instr_start_address)?;
+    let result = assembler.assemble_options(
+        instr_start_address,
+        BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS,
+    )?;
+
+    // Now get the entry point start address
+    let entrypoint = match entrypoint_name {
+        Some(name) => match named_labels.get(&name) {
+            Some(l) => result.label_ip(&l.get())?,
+            None => {
+                return Err(EncodeError::StrError {
+                    e: format!("Could not find entrypoint label: {:?}", name).to_string(),
+                });
+            }
+        },
+        None => 0,
+    };
 
     return Ok(EncodeResult {
-        code: result,
-        first_instr_address: instr_start_address,
+        code: result.inner.code_buffer,
+        code_start_address: instr_start_address,
+        entrypoint_address: entrypoint,
         data_start_address,
+        data_section: data_section,
         data_section_size: 0,
     });
 }
@@ -1235,6 +1260,7 @@ mod test_encoder {
             crate::parser::input::InputFile { parsed_lines: i },
             0x2000,
             0x1000,
+            None,
         );
         assert!(encode_res.is_ok(), "{}", encode_res.err().unwrap());
 
@@ -1374,7 +1400,7 @@ mod test_encoder {
         let result = input::parse_gnu_as_input(alphabet_assembly.to_string());
         assert!(result.is_ok(), "{}", result.err().unwrap());
 
-        let encode_res = encode_file(result.unwrap(), 0x2000, 0x1000);
+        let encode_res = encode_file(result.unwrap(), 0x2000, 0x1000, None);
         assert!(encode_res.is_ok(), "{}", encode_res.err().unwrap());
     }
 }

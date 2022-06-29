@@ -58,6 +58,12 @@ pub struct EncodeResult {
     data_section_size: u64,
 }
 
+pub struct DataSectionEntry {
+    label: String,
+    offset: u64,
+    size: u8,
+}
+
 pub fn encode_file(
     input: InputFile,
     instr_start_address: u64,
@@ -69,24 +75,28 @@ pub fn encode_file(
     let mut named_labels: HashMap<String, Cell<CodeLabel>> = HashMap::new();
 
     // data_section maps a data label name to its offset and data size
-    let mut data_section: Vec<(String, i64, i8)> = vec![];
+    let mut data_section: Vec<DataSectionEntry> = vec![];
     let mut next_data_section_offset = 0;
 
-    let mut labeled_mem_operand = |label: String, size: i8| -> Result<u64, EncodeError> {
-        match data_section.iter().find(|(l, _, _)| label.eq(l)) {
-            Some((_, offset, s)) => {
-                if size.eq(s) {
-                    Ok(data_start_address + offset.clone() as u64)
+    let mut labeled_mem_operand = |label: String, size: u8| -> Result<u64, EncodeError> {
+        match data_section.iter().find(|e| label.eq(e.label.as_str())) {
+            Some(entry) => {
+                if size == entry.size {
+                    Ok(data_start_address + entry.offset.clone())
                 } else {
                     Err(EncodeError::StrError {
-                        e: format!("data label {} has size {} but expected {}", label, s, size),
+                        e: format!("data label {} has size {} but expected {}", label, entry.size, size),
                     })
                 }
             }
             None => {
                 let next = data_start_address + next_data_section_offset as u64;
-                data_section.push((label, next_data_section_offset, size));
-                next_data_section_offset += i64::from(size);
+                data_section.push(DataSectionEntry {
+                    label: label.clone(),
+                    offset: next_data_section_offset,
+                    size,
+                });
+                next_data_section_offset += u64::from(size);
 
                 Ok(next)
             }

@@ -273,8 +273,8 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
 pub enum ValueOperand {
     Register { r: Register },
     Immediate { i: i64 },
-    Memory { label: String, size: i8 },
-    DynamicMemory { register: Register, size: i8 },
+    Memory { label: String, size: u8 },
+    DynamicMemory { register: Register, size: u8 },
 }
 
 pub fn parse_label(label: String) -> Result<JumpTarget, String> {
@@ -940,7 +940,7 @@ lazy_static! {
         Regex::new(r"(?m)^(?:rip\s*\+)?\s*(.*?)\s*$").unwrap();
 }
 
-const MEM_OPERAND_SIZE_MAP: phf::Map<&str, i8> = phf_map! {
+const MEM_OPERAND_SIZE_MAP: phf::Map<&str, u8> = phf_map! {
     "BYTE" => 1,
     "WORD" => 2,
     "DWORD" => 4,

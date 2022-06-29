@@ -219,7 +219,7 @@ pub fn encode_file(
                                 }
                             }
                         }
-                        ValueOperand::Register { r: destr } => match dst.clone() {
+                        ValueOperand::Register { r: destr } => match src.clone() {
                             ValueOperand::Register { r } => match r.size.to_owned() {
                                 1 => {
                                     assembler.mov(
@@ -1171,6 +1171,43 @@ pub fn encode_file(
         data_start_address,
         data_section_size: 0,
     });
+}
+
+#[cfg(test)]
+mod test_sanity {
+    // There is some kind of bug where this encoding isn't correct.
+    // This test is here to make sure that it's a fault of my own code, not that of iced
+    use iced_x86::{code_asm::*, MemoryOperand, Register};
+
+    #[test]
+    fn iced_returns_correct_bytes() {
+        let mut assembler = CodeAssembler::new(64).unwrap();
+        assembler
+            .mov(
+                gpr64::get_gpr64(Register::RBX).unwrap(),
+                gpr64::get_gpr64(Register::RDI).unwrap(),
+            )
+            .unwrap();
+
+        let result = assembler.assemble(0).unwrap();
+
+        assert_eq!(result, vec![0x48, 0x89, 0xfb]);
+    }
+
+    #[test]
+    fn iced_returns_correct_bytes2() {
+        let mut assembler = CodeAssembler::new(64).unwrap();
+        assembler
+            .mov(
+                gpr64::get_gpr64(Register::RBX).unwrap(),
+                gpr64::get_gpr64(Register::RBX).unwrap(),
+            )
+            .unwrap();
+
+        let result = assembler.assemble(0).unwrap();
+
+        assert_eq!(result, vec![0x48, 0x89, 0xdb]);
+    }
 }
 
 #[cfg(test)]

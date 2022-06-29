@@ -286,8 +286,12 @@ pub fn parse_label(label: String) -> Result<JumpTarget, String> {
     match Register::parse(label.to_string()) {
         Ok(_) => Err("cannot use register as label".to_string()),
         Err(_) => {
-            let ends = &['b', 'f'][..];
-            if label.ends_with(ends) && label[..label.len() - 1].parse::<i8>().is_ok() {
+            if label.parse::<i8>().is_ok() {
+                return Ok(JumpTarget::Relative {
+                    forwards: false,
+                    label: label.to_string(),
+                });
+            } else if label[..label.len() - 1].parse::<i8>().is_ok() {
                 return Ok(JumpTarget::Relative {
                     forwards: label.ends_with("f"),
                     label: label[..label.len() - 1].to_string(),
@@ -323,8 +327,9 @@ mod parse_label_test {
     fn parse_normal_labels() {
         assert_eq!(
             super::parse_label("3".to_string()),
-            Ok(super::JumpTarget::Absolute {
-                label: "3".to_string()
+            Ok(super::JumpTarget::Relative {
+                label: "3".to_string(),
+                forwards: false
             })
         );
     }

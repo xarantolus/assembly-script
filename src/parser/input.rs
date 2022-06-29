@@ -40,7 +40,6 @@ impl fmt::Display for ParseError {
     }
 }
 
-// TODO: reject input with multiple labels of the same name
 pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, ParseError> {
     let lines = input_file_content.lines();
 
@@ -108,7 +107,7 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Parse
 
 #[cfg(test)]
 mod test_gnu_as_parser {
-    use crate::parser::instructions::{Instruction, ValueOperand, JumpTarget};
+    use crate::parser::instructions::{Instruction, JumpCondition, JumpTarget, ValueOperand};
     use crate::parser::registers::GPRegister;
     use crate::parser::{
         input::{InputFile, LineType},
@@ -235,6 +234,114 @@ mod test_gnu_as_parser {
     }
 
     #[test]
+    fn parse_relative_labels() {
+        let res = parse_gnu_as_input(
+            r#"
+        .text
+        2:
+        cmp rax, 0
+        je 1f
+        sub rax, 1
+        1:
+
+        cmp rbx, 0
+        je 1f
+        sub rbx, 1
+        1:
+        "#
+            .to_string(),
+        );
+        assert!(res.is_ok());
+
+        let parsed = res.ok().unwrap();
+
+        assert_eq!(
+            parsed,
+            InputFile {
+                parsed_lines: vec![
+                    LineType::Label {
+                        l: JumpTarget::Relative {
+                            label: "2".to_string(),
+                            forwards: false,
+                        },
+                    },
+                    LineType::Instruction {
+                        i: Instruction::CMP {
+                            src1: Register {
+                                name: "RAX".to_string(),
+                                size: 8,
+                                part_of: GPRegister::RAX,
+                            },
+
+                            src2: ValueOperand::Immediate { i: 0 }
+                        }
+                    },
+                    LineType::Instruction {
+                        i: Instruction::JMPlabel {
+                            target: JumpTarget::Relative {
+                                label: "1".to_string(),
+                                forwards: true,
+                            },
+                            condition: JumpCondition::ZeroEqual,
+                        }
+                    },
+                    LineType::Instruction {
+                        i: Instruction::SUB {
+                            destination: Register {
+                                name: "RAX".to_string(),
+                                size: 8,
+                                part_of: GPRegister::RAX,
+                            },
+                            source: ValueOperand::Immediate { i: 1 }
+                        }
+                    },
+                    LineType::Label {
+                        l: JumpTarget::Relative {
+                            label: "1".to_string(),
+                            forwards: false,
+                        },
+                    },
+                    LineType::Instruction {
+                        i: Instruction::CMP {
+                            src1: Register {
+                                name: "RBX".to_string(),
+                                size: 8,
+                                part_of: GPRegister::RBX,
+                            },
+                            src2: ValueOperand::Immediate { i: 0 }
+                        }
+                    },
+                    LineType::Instruction {
+                        i: Instruction::JMPlabel {
+                            target: JumpTarget::Relative {
+                                label: "1".to_string(),
+                                forwards: true,
+                            },
+                            condition: JumpCondition::ZeroEqual,
+                        }
+                    },
+                    LineType::Instruction {
+                        i: Instruction::SUB {
+                            destination: Register {
+                                name: "RBX".to_string(),
+                                size: 8,
+                                part_of: GPRegister::RBX,
+                            },
+                            source: ValueOperand::Immediate { i: 1 }
+                        }
+                    },
+                    LineType::Label {
+                        l: JumpTarget::Relative {
+                            label: "1".to_string(),
+                            forwards: false
+                        },
+                    },
+                ],
+            }
+        );
+    }
+
+    #[test]
     fn simple_call() {
         let res = parse_gnu_as_input(
             r#"
@@ -294,7 +401,10 @@ fn parse_label(line: &str) -> Result<LineType, String> {
 
 #[cfg(test)]
 mod label_parser_test {
-    use crate::parser::{input::{parse_label, LineType}, instructions::JumpTarget};
+    use crate::parser::{
+        input::{parse_label, LineType},
+        instructions::JumpTarget,
+    };
 
     #[test]
     fn happy() {

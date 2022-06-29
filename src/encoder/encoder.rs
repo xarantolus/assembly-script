@@ -1,7 +1,6 @@
-
+use serde::Serialize;
 use std::{cell::Cell, collections::HashMap, fmt};
 use wasm_bindgen::prelude::wasm_bindgen;
-use serde::Serialize;
 
 use iced_x86::{code_asm::*, BlockEncoderOptions, Register};
 use lazy_static::lazy_static;
@@ -1188,13 +1187,14 @@ pub fn encode_file(
         None => 0,
     };
 
+    let size = data_section.iter().map(|x| u64::from(x.size)).sum();
     return Ok(EncodeResult {
         code: result.inner.code_buffer,
         code_start_address: instr_start_address,
         entrypoint_address: entrypoint,
         data_start_address,
         data_section: data_section,
-        data_section_size: 0,
+        data_section_size: size,
     });
 }
 

@@ -1,6 +1,8 @@
 pub mod encoder;
 pub mod parser;
 
+use std::fmt::format;
+
 use encoder::encoder::encode_file;
 use wasm_bindgen::prelude::*;
 
@@ -18,7 +20,7 @@ pub fn assemble(
     instr_start_address: u64,
     data_start_address: u64,
     entrypoint: String,
-) -> Result<EncodeResult, String> {
+) -> Result<JsValue, String> {
     let parsed_file =
         parser::input::parse_gnu_as_input(input_file_content).map_err(|e| format!("{}", e))?;
 
@@ -30,5 +32,5 @@ pub fn assemble(
     )
     .map_err(|e| e.to_string())?;
 
-    return Ok(result);
+    return serde_wasm_bindgen::to_value(&result).map_err(|e| format!("{}", e).to_string());
 }

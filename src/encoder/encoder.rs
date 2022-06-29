@@ -1,6 +1,7 @@
 
 use std::{cell::Cell, collections::HashMap, fmt};
 use wasm_bindgen::prelude::wasm_bindgen;
+use serde::Serialize;
 
 use iced_x86::{code_asm::*, BlockEncoderOptions, Register};
 use lazy_static::lazy_static;
@@ -50,7 +51,7 @@ impl From<&str> for EncodeError {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct EncodeResult {
     code: Vec<u8>,
     code_start_address: u64,
@@ -62,7 +63,7 @@ pub struct EncodeResult {
 }
 
 #[wasm_bindgen]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DataSectionEntry {
     label: String,
     offset: u64,

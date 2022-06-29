@@ -106,15 +106,19 @@ readchar:
         console.log("Download done!");
 
 
-        async function runInterpreter() {
+        async function runGNULikeAssembler() {
             console.log("running");
-            mod.interpret_assembly_file(0, inputText, "main");
-            console.log("ran");
+            let result = mod.assemble(inputText, 0x2000n, 0x1000n, "main");
+            console.log(result);
         }
+
+		function appendText(str) {
+			console.log("log:", str)
+		}
 
         async function runWrap() {
             try {
-                await runInterpreter();
+                await runGNULikeAssembler();
             } catch (e) {
                 appendText(String(e));
                 if (typeof e === "object")

@@ -1,15 +1,14 @@
-use phf::phf_map;
+
 use std::{cell::Cell, collections::HashMap, fmt};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use iced_x86::{code_asm::*, BlockEncoderOptions, MemoryOperand, Register};
+use iced_x86::{code_asm::*, BlockEncoderOptions, Register};
 use lazy_static::lazy_static;
 
 use crate::parser::{
     input::{InputFile, LineType},
     instructions,
     instructions::{JumpCondition, JumpTarget, ValueOperand},
-    registers,
 };
 
 #[derive(Debug)]
@@ -119,7 +118,7 @@ pub fn encode_file(
         }
     };
 
-    for (idx, line) in input.parsed_lines.iter().enumerate() {
+    for (_idx, line) in input.parsed_lines.iter().enumerate() {
         match line {
             LineType::Label { l } => match l.clone() {
                 JumpTarget::Absolute { label: name } => {
@@ -1122,7 +1121,7 @@ pub fn encode_file(
                     destination,
                     source,
                 } => match source {
-                    ValueOperand::Memory { label, size } => {
+                    ValueOperand::Memory { label, size: _ } => {
                         if destination.size != 8 {
                             strerror(format!(
                                 "lea: Invalid register size {:?}, must be 8",
@@ -1202,7 +1201,7 @@ pub fn encode_file(
 mod test_sanity {
     // There is some kind of bug where this encoding isn't correct.
     // This test is here to make sure that it's a fault of my own code, not that of iced
-    use iced_x86::{code_asm::*, MemoryOperand, Register};
+    use iced_x86::{code_asm::*, Register};
 
     #[test]
     fn iced_returns_correct_bytes() {

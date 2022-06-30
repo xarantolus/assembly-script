@@ -1190,7 +1190,7 @@ pub fn encode_file(
     let size = data_section.iter().map(|x| u64::from(x.size)).sum();
     return Ok(EncodeResult {
         code: result.inner.code_buffer,
-        code_start_address: instr_start_address,
+        code_start_address: result.inner.rip,
         entrypoint_address: entrypoint,
         data_start_address,
         data_section: data_section,
@@ -1265,6 +1265,43 @@ mod test_encoder {
         assert!(encode_res.is_ok(), "{}", encode_res.err().unwrap());
 
         assert_eq!(encode_res.unwrap().code, u);
+    }
+
+    #[test]
+    fn entrypoint_addr() {
+        let input_lines: Vec<input::LineType> = vec![
+            input::LineType::Label {
+                l: JumpTarget::Absolute {
+                    label: "some_function".to_owned(),
+                },
+            },
+            input::LineType::Instruction {
+                i: Instruction::RET {},
+            },
+            input::LineType::Label {
+                l: JumpTarget::Absolute {
+                    label: "actual_entrypoint".to_owned(),
+                },
+            },
+            input::LineType::Instruction {
+                i: Instruction::RET {},
+            },
+        ];
+
+        let encode_res = encode_file(
+            crate::parser::input::InputFile { parsed_lines: input_lines },
+            0x2000,
+            0x1000,
+            Some("actual_entrypoint".to_owned()),
+        );
+        assert!(encode_res.is_ok(), "{}", encode_res.err().unwrap());
+
+        let res = encode_res.unwrap();
+
+        assert_eq!(res.code_start_address, 0x2000);
+        // Offset by one because "ret" instruction is one byte
+        assert_eq!(res.entrypoint_address, 0x2001);
+        assert_eq!(res.data_start_address, 0x1000);
     }
 
     #[test]

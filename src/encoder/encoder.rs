@@ -356,10 +356,63 @@ pub fn encode_file(
                                     strerror(format!("Invalid register size {:?}", destr.size))?;
                                 }
                             },
+                            ValueOperand::DirectMemory { i } => match destr.size.to_owned() {
+                                1 => {
+                                    assembler.mov(
+                                        gpr8::get_gpr8(
+                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 8-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                        byte_ptr(i),
+                                    )?;
+                                }
+                                2 => {
+                                    assembler.mov(
+                                        gpr16::get_gpr16(
+                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 16-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                        word_ptr(i),
+                                    )?;
+                                }
+                                4 => {
+                                    assembler.mov(
+                                        gpr32::get_gpr32(
+                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 32-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                        dword_ptr(i),
+                                    )?;
+                                }
+                                8 => {
+                                    assembler.mov(
+                                        gpr64::get_gpr64(
+                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 64-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                        qword_ptr(i),
+                                    )?;
+                                }
+                                _ => {
+                                    strerror(format!("Invalid register size {:?}", destr.size))?;
+                                }
+                            },
                             _ => {
                                 strerror(format!(
-                                    "mov destination {:?} is not a register or immediate",
-                                    dst,
+                                    "mov source ({:?}) must be a register, memory or immediate operand",
+                                    src,
                                 ))?;
                             }
                         },
@@ -1289,7 +1342,9 @@ mod test_encoder {
         ];
 
         let encode_res = encode_file(
-            crate::parser::input::InputFile { parsed_lines: input_lines },
+            crate::parser::input::InputFile {
+                parsed_lines: input_lines,
+            },
             0x2000,
             0x1000,
             Some("actual_entrypoint".to_owned()),
@@ -1302,6 +1357,23 @@ mod test_encoder {
         // Offset by one because "ret" instruction is one byte
         assert_eq!(res.entrypoint_address, 0x2001);
         assert_eq!(res.data_start_address, 0x1000);
+    }
+
+    #[test]
+    fn mov_deref_null() {
+        assert_encoding(
+            vec![Instruction::MOV {
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "RAX".to_string(),
+                        size: 8,
+                        part_of: registers::GPRegister::RAX,
+                    },
+                },
+                source: ValueOperand::DirectMemory { i: 15 },
+            }],
+            vec![72, 161, 15, 0, 0, 0, 0, 0, 0, 0],
+        );
     }
 
     #[test]

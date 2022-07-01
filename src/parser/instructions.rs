@@ -274,6 +274,7 @@ pub enum ValueOperand {
     Immediate { i: i64 },
     Memory { label: String, size: u8 },
     DynamicMemory { register: Register, size: u8 },
+    DirectMemory { i: u32 },
 }
 
 pub fn parse_label(label: String) -> Result<JumpTarget, String> {
@@ -600,6 +601,23 @@ mod instruction_parse_test {
         assert_eq!(
             parse_instruction("push cl"),
             Err("PUSH not supported for register CL of size 1".to_string())
+        );
+    }
+
+    #[test]
+    fn mov_direct_deref() {
+        assert_eq!(
+            parse_instruction("mov rax, [0]"),
+            Ok(Instruction::MOV {
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "RAX".to_string(),
+                        size: 8,
+                        part_of: GPRegister::RAX,
+                    }
+                },
+                source: ValueOperand::DirectMemory { i: 0 }
+            })
         );
     }
 
@@ -985,10 +1003,13 @@ fn parse_as_memory_operand(expr: &str) -> Result<ValueOperand, String> {
                     register: r,
                     size: 0,
                 }),
-                Err(_) => Ok(ValueOperand::Memory {
-                    label: label[0].to_string(),
-                    size: 0,
-                }),
+                Err(_) => match u32::from_str_radix(label[0], 10) {
+                    Ok(num) => Ok(ValueOperand::DirectMemory { i: num }),
+                    Err(_) => Ok(ValueOperand::Memory {
+                        label: label[0].to_string(),
+                        size: 0,
+                    }),
+                },
             }
         }
         [size_str, ptr, deref] => {

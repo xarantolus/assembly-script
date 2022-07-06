@@ -417,6 +417,20 @@ mod instruction_parse_test {
     use super::JumpCondition;
 
     #[test]
+    fn mov_colon() {
+        assert_eq!(
+            parse_instruction("mov BYTE PTR [rip + .LCharacter], ':'"),
+            Ok(Instruction::MOV {
+                destination: ValueOperand::Memory {
+                    label: ".LCharacter".to_string(),
+                    size: 1
+                },
+                source: ValueOperand::Immediate { i: b':' as i64 }
+            })
+        );
+    }
+
+    #[test]
     fn mov_memory() {
         assert_eq!(
             parse_instruction("mov al, BYTE PTR [rip + .LCharacter]"),

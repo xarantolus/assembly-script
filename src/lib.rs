@@ -1,12 +1,12 @@
 pub mod encoder;
 pub mod parser;
 
-use std::fmt::format;
+
 
 use encoder::encoder::encode_file;
 use wasm_bindgen::prelude::*;
 
-use crate::encoder::encoder::EncodeResult;
+
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.

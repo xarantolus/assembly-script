@@ -1,6 +1,8 @@
 use std::fmt;
 
 use crate::parser::instructions::{parse_instruction, Instruction};
+use lazy_static::lazy_static;
+use regex::Regex;
 
 use super::instructions::{self, JumpTarget};
 
@@ -40,6 +42,10 @@ impl fmt::Display for ParseError {
     }
 }
 
+lazy_static! {
+    static ref MEM_OPERAND_REGEX: Regex = Regex::new(r"(?m)[^']:").unwrap();
+}
+
 pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, ParseError> {
     let lines = input_file_content.lines();
 
@@ -72,7 +78,7 @@ pub fn parse_gnu_as_input(input_file_content: String) -> Result<InputFile, Parse
         // Look for labels like "function_name:"
         // some lines also are like "label: instruction", we want to handle that too
         let split = line.split_once(":");
-        if split.is_some() {
+        if split.is_some() && !split.unwrap().1.ends_with("'") {
             let (label, rest) = split.unwrap();
             parsed_lines.push(parse_label(label).map_err(|e| ParseError {
                 line_number: line_num,
@@ -156,6 +162,35 @@ mod test_gnu_as_parser {
                         i: Instruction::RET {}
                     },
                 ],
+            }
+        );
+    }
+
+    #[test]
+    fn colon_constant_not_a_label() {
+        let res = parse_gnu_as_input(
+            r#"
+        .text
+        mov BYTE PTR [rip + .LCharacter], ':'
+        "#
+            .to_string(),
+        );
+        assert!(res.is_ok());
+
+        let parsed = res.ok().unwrap();
+
+        assert_eq!(
+            parsed,
+            InputFile {
+                parsed_lines: vec![LineType::Instruction {
+                    i: Instruction::MOV {
+                        destination: ValueOperand::Memory {
+                            label: ".LCharacter".to_string(),
+                            size: 1
+                        },
+                        source: ValueOperand::Immediate { i: b':' as i64 }
+                    }
+                },],
             }
         );
     }
@@ -249,26 +284,24 @@ mod test_gnu_as_parser {
         assert_eq!(
             parsed,
             InputFile {
-                parsed_lines: vec![
-                    LineType::Instruction {
-                        i: Instruction::MOV {
-                            destination: ValueOperand::Register {
-                                r: Register {
-                                    name: "RBX".to_string(),
-                                    size: 8,
-                                    part_of: GPRegister::RBX,
-                                }
-                            },
-                            source: ValueOperand::Register {
-                                r: Register {
-                                    name: "RDI".to_string(),
-                                    size: 8,
-                                    part_of: GPRegister::RDI,
-                                }
+                parsed_lines: vec![LineType::Instruction {
+                    i: Instruction::MOV {
+                        destination: ValueOperand::Register {
+                            r: Register {
+                                name: "RBX".to_string(),
+                                size: 8,
+                                part_of: GPRegister::RBX,
+                            }
+                        },
+                        source: ValueOperand::Register {
+                            r: Register {
+                                name: "RDI".to_string(),
+                                size: 8,
+                                part_of: GPRegister::RDI,
                             }
                         }
-                    },
-                ],
+                    }
+                },],
             }
         );
     }

@@ -1,69 +1,25 @@
-<div align="center">
+# assembly-script
+This is a very basic `x86_64` (very small subset) Assembler based on the [`iced-x86`](https://crates.io/crates/iced-x86) Rust crate. I built it because I couldn't find a version of the GNU Assembler for `x86_64` that worked on the web.
 
-  <h1><code>wasm-pack-template</code></h1>
+I use it in the [MemeAssembly playground](https://github.com/xarantolus/memeassembly-playground) to translate `x86_64` Assembly code into its binary representation. This binary representation is then run in the browser.
 
-  <strong>A template for kick starting a Rust and WebAssembly project using <a href="https://github.com/rustwasm/wasm-pack">wasm-pack</a>.</strong>
+This project will probably not be useful to you if you don't have very similar goals, e.g. like assembling a minimal `x86_64` subset on the web.
 
-  <p>
-    <a href="https://travis-ci.org/rustwasm/wasm-pack-template"><img src="https://img.shields.io/travis/rustwasm/wasm-pack-template.svg?style=flat-square" alt="Build Status" /></a>
-  </p>
+### Build instructions
+First make sure you have the Rust toolchain installed.
 
-  <h3>
-    <a href="https://rustwasm.github.io/docs/wasm-pack/tutorials/npm-browser-packages/index.html">Tutorial</a>
-    <span> | </span>
-    <a href="https://discordapp.com/channels/442252698964721669/443151097398296587">Chat</a>
-  </h3>
+1. [Install `wasm-pack`](https://rustwasm.github.io/wasm-pack/installer/)
 
-  <sub>Built with 🦀🕸 by <a href="https://rustwasm.github.io/">The Rust and WebAssembly Working Group</a></sub>
-</div>
+2. Clone this repo
 
-## About
+       git clone https://github.com/xarantolus/assembly-script.git
 
-[**📚 Read this template tutorial! 📚**][template-docs]
+3. Go to its directory:
 
-This template is designed for compiling Rust libraries into WebAssembly and
-publishing the resulting package to NPM.
+       cd assembly-script
 
-Be sure to check out [other `wasm-pack` tutorials online][tutorials] for other
-templates and usages of `wasm-pack`.
+4. Run `make` to generate the WebAssembly binary
 
-[tutorials]: https://rustwasm.github.io/docs/wasm-pack/tutorials/index.html
-[template-docs]: https://rustwasm.github.io/docs/wasm-pack/tutorials/npm-browser-packages/index.html
+       make
 
-## 🚴 Usage
-
-### 🐑 Use `cargo generate` to Clone this Template
-
-[Learn more about `cargo generate` here.](https://github.com/ashleygwilliams/cargo-generate)
-
-```
-cargo generate --git https://github.com/rustwasm/wasm-pack-template.git --name my-project
-cd my-project
-```
-
-### 🛠️ Build with `wasm-pack build`
-
-```
-wasm-pack build
-```
-
-### 🔬 Test in Headless Browsers with `wasm-pack test`
-
-```
-wasm-pack test --headless --firefox
-```
-
-### 🎁 Publish to NPM with `wasm-pack publish`
-
-```
-wasm-pack publish
-```
-
-## 🔋 Batteries Included
-
-* [`wasm-bindgen`](https://github.com/rustwasm/wasm-bindgen) for communicating
-  between WebAssembly and JavaScript.
-* [`console_error_panic_hook`](https://github.com/rustwasm/console_error_panic_hook)
-  for logging panic messages to the developer console.
-* [`wee_alloc`](https://github.com/rustwasm/wee_alloc), an allocator optimized
-  for small code size.
+5. You can now run a local web server and open [`user.html`](user.html) to see a demo, or see the generated `pkg` directory for info on how to use this in your own projects (or [`user.html`](user.html) as an example)

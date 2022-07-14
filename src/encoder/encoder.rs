@@ -779,6 +779,137 @@ pub fn encode_file(
                     }
                 },
 
+                // SHL matching for register destination (1,2,4,8) and immediate value
+                instructions::Instruction::SHL {
+                    destination,
+                    source,
+                } => match source.clone() {
+                    ValueOperand::Immediate { i } => match destination.size.to_owned() {
+                        1 => {
+                            assembler.shl(
+                                gpr8::get_gpr8(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 8-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i as i32,
+                            )?;
+                        }
+                        2 => {
+                            assembler.shl(
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i as i32,
+                            )?;
+                        }
+                        4 => {
+                            assembler.shl(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i as i32,
+                            )?;
+                        }
+                        8 => {
+                            assembler.shl(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i as i32,
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid register size {:?}", destination.size))?;
+                        }
+                    },
+                    _ => {
+                        strerror(format!(
+                            "shl source {:?} is not an immediate operand",
+                            source
+                        ))?;
+                    }
+                },
+
+                // SHR matching for register destination (1,2,4,8) and immediate value
+                instructions::Instruction::SHR {
+                    destination,
+                    source,
+                } => match source.clone() {
+                    ValueOperand::Immediate { i } => match destination.size.to_owned() {
+                        1 => {
+                            assembler.shr(
+                                gpr8::get_gpr8(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 8-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i as i32,
+                            )?;
+                        }
+                        2 => {
+                            assembler.shr(
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i as i32,
+                            )?;
+                        }
+                        4 => {
+                            assembler.shr(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i as i32,
+                            )?;
+                        }
+                        8 => {
+                            assembler.shr(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i as i32,
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid register size {:?}", destination.size))?;
+                        }
+                    },
+                    _ => {
+                        strerror(format!(
+                            "shr source {:?} is not an immediate operand",
+                            source
+                        ))?;
+                    }
+                },
                 // TEST instruction with two operands: register and immediate operand, e.g. test rsp, 0xf
                 instructions::Instruction::TEST { src1, src2 } => match src2 {
                     ValueOperand::Immediate { i } => match src1.size.clone() {
@@ -1470,6 +1601,43 @@ mod test_encoder {
                 },
             }],
             vec![0x48, 0x89, 0xfb],
+        );
+    }
+
+    #[test]
+    fn reg_imm_shifts() {
+        assert_encoding_lines(
+            vec![
+                // shr ebx, 1
+                LineType::Instruction {
+                    i: Instruction::SHR {
+                        destination: Register {
+                            name: "EBX".to_string(),
+                            size: 4,
+                            part_of: registers::GPRegister::RBX,
+                        },
+                        source: ValueOperand::Immediate { i: 1 },
+                    },
+                },
+            ],
+            vec![0xd1, 0xeb],
+        );
+
+        assert_encoding_lines(
+            vec![
+                // shl rax, 1
+                LineType::Instruction {
+                    i: Instruction::SHL {
+                        destination: Register {
+                            name: "RAX".to_string(),
+                            size: 8,
+                            part_of: registers::GPRegister::RAX,
+                        },
+                        source: ValueOperand::Immediate { i: 1 },
+                    },
+                },
+            ],
+            vec![0x48, 0xd1, 0xe0],
         );
     }
 

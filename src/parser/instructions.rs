@@ -35,6 +35,16 @@ pub enum Instruction {
         source: ValueOperand,
     },
 
+    SHL {
+        destination: Register,
+        source: ValueOperand,
+    },
+
+    SHR {
+        destination: Register,
+        source: ValueOperand,
+    },
+
     AND {
         destination: Register,
         source: ValueOperand,
@@ -249,6 +259,20 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
             Ok(Instruction::TEST {
                 src1: src1,
                 src2: src2,
+            })
+        }
+        ("SHL", 2) => {
+            let (src1, src2) = parse_2_instruction_args(split)?;
+            Ok(Instruction::SHL {
+                destination: src1,
+                source: src2,
+            })
+        }
+        ("SHR", 2) => {
+            let (src1, src2) = parse_2_instruction_args(split)?;
+            Ok(Instruction::SHR {
+                destination: src1,
+                source: src2,
             })
         }
         ("LEA", 2) => {

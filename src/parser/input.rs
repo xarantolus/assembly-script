@@ -307,6 +307,68 @@ mod test_gnu_as_parser {
     }
 
     #[test]
+    fn shr_reg_imm() {
+        let res = parse_gnu_as_input(
+            r#"
+        .text
+        shr ebx, 1
+        "#
+            .to_string(),
+        );
+        assert!(res.is_ok());
+
+        let parsed = res.ok().unwrap();
+
+        assert_eq!(
+            parsed,
+            InputFile {
+                parsed_lines: vec![LineType::Instruction {
+                    i: Instruction::SHR {
+                        destination: Register {
+                            name: "EBX".to_string(),
+                            size: 4,
+                            part_of: GPRegister::RBX,
+                        },
+                        source: ValueOperand::Immediate { i: 1 }
+                    }
+                },
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn shl_reg_imm() {
+        let res = parse_gnu_as_input(
+            r#"
+        .text
+        shl rax, 1
+        "#
+            .to_string(),
+        );
+        assert!(res.is_ok());
+
+        let parsed = res.ok().unwrap();
+
+        assert_eq!(
+            parsed,
+            InputFile {
+                parsed_lines: vec![LineType::Instruction {
+                    i: Instruction::SHL {
+                        destination: Register {
+                            name: "RAX".to_string(),
+                            size: 8,
+                            part_of: GPRegister::RAX,
+                        },
+                        source: ValueOperand::Immediate { i: 1 }
+                    }
+                },
+                ],
+            }
+        );
+    }
+
+    #[test]
     fn parse_relative_labels() {
         let res = parse_gnu_as_input(
             r#"

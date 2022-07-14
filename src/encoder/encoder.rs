@@ -967,6 +967,68 @@ pub fn encode_file(
                         ))?;
                     }
                 },
+                // AND instruction with two operands: register and immediate operand, e.g. and eax, 0xf
+                instructions::Instruction::AND {
+                    destination,
+                    source,
+                } => match source {
+                    ValueOperand::Immediate { i } => match destination.size.clone() {
+                        1 => {
+                            assembler.and(
+                                gpr8::get_gpr8(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 8-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i.clone() as i32,
+                            )?;
+                        }
+                        2 => {
+                            assembler.and(
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i.clone() as i32,
+                            )?;
+                        }
+                        4 => {
+                            assembler.and(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i.clone() as i32,
+                            )?;
+                        }
+                        8 => {
+                            assembler.and(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i.clone() as i32,
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid register size {:?}", destination.size))?;
+                        }
+                    },
+                    _ => {
+                        strerror(format!("and: second source operand is not an immediate"))?;
+                    }
+                },
                 instructions::Instruction::CMP {
                     src1: register,
                     src2,
@@ -1739,6 +1801,33 @@ mod test_encoder {
                 source: ValueOperand::Immediate { i: 0x42 },
             }],
             vec![0xc6, 0x4, 0x25, 0, 16, 0, 0, 66],
+        );
+    }
+
+    #[test]
+    fn and_reg_imm() {
+        assert_encoding(
+            vec![Instruction::AND {
+                destination: Register {
+                    name: "RAX".to_string(),
+                    size: 8,
+                    part_of: registers::GPRegister::RAX,
+                },
+                source: ValueOperand::Immediate { i: 0x42 },
+            }],
+            vec![0x48, 37, 66, 0, 0, 0],
+        );
+
+        assert_encoding(
+            vec![Instruction::AND {
+                destination: Register {
+                    name: "EAX".to_string(),
+                    size: 4,
+                    part_of: registers::GPRegister::RAX,
+                },
+                source: ValueOperand::Immediate { i: 15 },
+            }],
+            vec![37, 15, 0, 0, 0],
         );
     }
 

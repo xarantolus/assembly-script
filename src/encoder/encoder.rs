@@ -967,6 +967,57 @@ pub fn encode_file(
                         ))?;
                     }
                 },
+                instructions::Instruction::NOTreg { destination } => {
+                    match destination.size.clone() {
+                        1 => {
+                            assembler.not(
+                                gpr8::get_gpr8(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 8-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        2 => {
+                            assembler.not(
+                                gpr16::get_gpr16(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 16-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        4 => {
+                            assembler.not(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        8 => {
+                            assembler.not(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid register size {:?}", destination.size))?;
+                        }
+                    }
+                }
                 // AND instruction with two operands: register and immediate operand, e.g. and eax, 0xf
                 instructions::Instruction::AND {
                     destination,
@@ -1027,6 +1078,109 @@ pub fn encode_file(
                     },
                     _ => {
                         strerror(format!("and: second source operand is not an immediate"))?;
+                    }
+                },
+                instructions::Instruction::IMUL {
+                    destination,
+                    source,
+                } => match source.clone() {
+                    ValueOperand::Register { r } => match destination.size.clone() {
+                        4 => {
+                            assembler.imul_2(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", r).to_string(),
+                                )?,
+                            )?;
+                        }
+                        8 => {
+                            assembler.imul_2(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", r).to_string(),
+                                )?,
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid register size {:?}", destination.size))?;
+                        }
+                    },
+                    ValueOperand::Immediate { i } => match destination.size.clone() {
+                        4 => {
+                            assembler.imul_3(
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                gpr32::get_gpr32(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 32-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i.clone() as i32,
+                            )?;
+                        }
+                        8 => {
+                            assembler.imul_3(
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                gpr64::get_gpr64(
+                                    REGISTERS.get(destination.name.as_str()).unwrap().to_owned(),
+                                )
+                                .ok_or(
+                                    format!("Could not get 64-bit register {:?}", destination.name)
+                                        .to_string(),
+                                )?,
+                                i.clone() as i32,
+                            )?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid register size {:?}", destination.size))?;
+                        }
+                    },
+                    _ => {
+                        strerror(format!("imul: second source operand is not a register"))?;
+                    }
+                },
+                instructions::Instruction::IDIV { source } => match source.clone() {
+                    ValueOperand::Memory { label, size } => match size.clone() {
+                        8 => {
+                            assembler.idiv(qword_ptr(labeled_mem_operand(label, size)?))?;
+                        }
+                        _ => {
+                            strerror(format!("Invalid mem operand size {:?}", size))?;
+                        }
+                    },
+                    _ => {
+                        strerror(format!("idiv: source operand is not a memory operand"))?;
                     }
                 },
                 instructions::Instruction::CMP {
@@ -1460,6 +1614,15 @@ pub fn encode_file(
                 }
                 instructions::Instruction::RET {} => {
                     assembler.ret()?;
+                }
+                instructions::Instruction::NOP {} => {
+                    assembler.nop()?;
+                }
+                instructions::Instruction::INT3 {} => {
+                    assembler.int3()?;
+                }
+                instructions::Instruction::CQO {} => {
+                    assembler.cqo()?;
                 }
                 _ => {
                     strerror(format!("unsupported instruction: {:?}", i).to_string())?;

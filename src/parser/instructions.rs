@@ -17,6 +17,10 @@ pub enum Instruction {
         source: ValueOperand,
     },
 
+    IDIV {
+        source: ValueOperand,
+    },
+
     PUSH {
         // The gnu assembler seems to treat `push 1` as pushing a 64-bit value
         source: ValueOperand,
@@ -83,7 +87,9 @@ pub enum Instruction {
         label: String,
     },
     RET {},
-
+    CQO {},
+    NOP {},
+    INT3 {},
     SYSCALL {},
 }
 
@@ -213,6 +219,9 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
         }
         ("SYSCALL", 0) => Ok(Instruction::SYSCALL {}),
         ("RET", 0) => Ok(Instruction::RET {}),
+        ("CQO", 0) => Ok(Instruction::CQO {}),
+        ("NOP", 0) => Ok(Instruction::NOP {}),
+        ("INT3", 0) => Ok(Instruction::INT3 {}),
         ("CALL", 1) => match Register::parse(split[1].to_string()) {
             Ok(_) => Err(format!("unspported call to register value {}", split[1])),
             Err(_) => Ok(Instruction::CALLlabel {
@@ -225,6 +234,11 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
                 destination: reg,
                 source: reg_or_imm,
             })
+        }
+        ("IDIV", 1) => {
+            let mem = parse_as_memory_operand(split[1])?;
+
+            Ok(Instruction::IDIV { source: mem })
         }
         ("ADD", 2) => {
             let (dest, src) = parse_2_instruction_args(split)?;

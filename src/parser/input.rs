@@ -331,8 +331,7 @@ mod test_gnu_as_parser {
                         },
                         source: ValueOperand::Immediate { i: 1 }
                     }
-                },
-                ],
+                },],
             }
         );
     }
@@ -362,8 +361,7 @@ mod test_gnu_as_parser {
                         },
                         source: ValueOperand::Immediate { i: 1 }
                     }
-                },
-                ],
+                },],
             }
         );
     }

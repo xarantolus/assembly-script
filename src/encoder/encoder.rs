@@ -49,24 +49,22 @@ impl From<&str> for EncodeError {
     }
 }
 
-#[wasm_bindgen]
 #[derive(Debug, Clone, Serialize)]
 pub struct EncodeResult {
-    code: Vec<u8>,
-    code_start_address: u64,
-    entrypoint_address: u64,
+    pub code: Vec<u8>,
+    pub code_start_address: u64,
+    pub entrypoint_address: u64,
 
-    data_start_address: u64,
-    data_section_size: u64,
-    data_section: Vec<DataSectionEntry>,
+    pub data_start_address: u64,
+    pub data_section_size: u64,
+    pub data_section: Vec<DataSectionEntry>,
 }
 
-#[wasm_bindgen]
 #[derive(Debug, Clone, Serialize)]
 pub struct DataSectionEntry {
-    label: String,
-    offset: u64,
-    size: u8,
+    pub label: String,
+    pub offset: u64,
+    pub size: u8,
 }
 
 pub fn encode_file(
@@ -118,6 +116,8 @@ pub fn encode_file(
         }
     };
 
+    let mut relative_labels_map: HashMap<usize, Cell<CodeLabel>> = HashMap::new();
+
     for (_idx, line) in input.parsed_lines.iter().enumerate() {
         match line {
             LineType::Label { l } => match l.clone() {
@@ -140,7 +140,17 @@ pub fn encode_file(
                     label: _,
                     forwards: _,
                 } => {
-                    assembler.anonymous_label()?;
+                    match relative_labels_map.get_mut(&_idx) {
+                        Some(l) => {
+                            assembler.set_label(l.get_mut())?;
+                        }
+                        None => {
+                            let mut l = Cell::new(assembler.create_label());
+                            assembler.set_label(l.get_mut())?;
+                            relative_labels_map.insert(_idx, l);
+                        }
+                    }
+                    // Add a zero-byte instruction to prevent conflicts on multiple labels after each other
                     assembler.zero_bytes()?;
                 }
             },
@@ -1542,13 +1552,35 @@ pub fn encode_file(
                                 new_label
                             }
                         },
-                        JumpTarget::Relative { label: _, forwards } => Cell::new(
-                            (if forwards.to_owned() {
-                                assembler.fwd()
+                        JumpTarget::Relative { label, forwards } => {
+                            if forwards.to_owned() {
+                                // Find the index of the label in the instruction stream following after current index
+                                let label_index = _idx
+                                    + input
+                                        .parsed_lines
+                                        .iter()
+                                        .skip(_idx)
+                                        .position(|x| match x {
+                                            LineType::Label {
+                                                l:
+                                                    JumpTarget::Relative {
+                                                        forwards: _,
+                                                        label: l,
+                                                    },
+                                            } => label.to_owned() == l.to_owned(),
+                                            _ => false,
+                                        })
+                                        .ok_or(format!("Could not find relative forward jump label {:?}", label))?;
+
+                                // Insert this into the map
+                                let new_label = Cell::new(assembler.create_label());
+                                relative_labels_map.insert(label_index, new_label.to_owned());
+
+                                new_label
                             } else {
-                                assembler.bwd()
-                            })?,
-                        ),
+                                panic!("Backwards jumps not yet supported");
+                            }
+                        }
                     };
 
                     match condition.to_owned() {
@@ -1569,7 +1601,6 @@ pub fn encode_file(
                         }
                     }
                 }
-
                 instructions::Instruction::LEA {
                     destination,
                     source,

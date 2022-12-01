@@ -166,16 +166,35 @@ pub fn encode_file(
                             // Move register or immediate to memory
                             match src.to_owned() {
                                 ValueOperand::Register { r } => match r.size.to_owned() {
-                                    1 => assembler.mov(
-                                        byte_ptr(labeled_mem_operand(label, size)?),
-                                        gpr8::get_gpr8(
-                                            REGISTERS.get(r.name.as_str()).unwrap().to_owned(),
-                                        )
-                                        .ok_or(
-                                            format!("Could not get 8-bit register {:?}", r)
-                                                .to_string(),
-                                        )?,
-                                    )?,
+                                    1 => {
+                                        if r.name.eq_ignore_ascii_case("al") {
+                                            // Add special case so this doesn't use the `MOV AL, moffs8` opcode, which the interpreter doesn't support
+                                            assembler.add_instruction(
+                                                iced_x86::Instruction::with2(
+                                                    iced_x86::Code::Mov_rm8_r8,
+                                                    iced_x86::MemoryOperand::with_displ(
+                                                        labeled_mem_operand(label, size)?,
+                                                        32,
+                                                    ),
+                                                    Register::AL,
+                                                )?,
+                                            )?;
+                                        } else {
+                                            assembler.mov(
+                                                byte_ptr(labeled_mem_operand(label, size)?),
+                                                gpr8::get_gpr8(
+                                                    REGISTERS
+                                                        .get(r.name.as_str())
+                                                        .unwrap()
+                                                        .to_owned(),
+                                                )
+                                                .ok_or(
+                                                    format!("Could not get 8-bit register {:?}", r)
+                                                        .to_string(),
+                                                )?,
+                                            )?;
+                                        }
+                                    }
                                     2 => assembler.mov(
                                         word_ptr(labeled_mem_operand(label, size)?),
                                         gpr16::get_gpr16(
@@ -421,16 +440,31 @@ pub fn encode_file(
                             },
                             ValueOperand::Memory { label, size } => match destr.size.to_owned() {
                                 1 => {
-                                    assembler.mov(
-                                        gpr8::get_gpr8(
-                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
-                                        )
-                                        .ok_or(
-                                            format!("Could not get 8-bit register {:?}", destr)
-                                                .to_string(),
-                                        )?,
-                                        byte_ptr(labeled_mem_operand(label, size)?),
-                                    )?;
+                                    if destr.name.eq_ignore_ascii_case("al") {
+                                        // Add special case so this doesn't use the `MOV AL, moffs8` opcode, which the interpreter doesn't support
+                                        assembler.add_instruction(iced_x86::Instruction::with2(
+                                            iced_x86::Code::Mov_rm8_r8,
+                                            Register::AL,
+                                            iced_x86::MemoryOperand::with_displ(
+                                                labeled_mem_operand(label, size)?,
+                                                32,
+                                            ),
+                                        )?)?;
+                                    } else {
+                                        assembler.mov(
+                                            gpr8::get_gpr8(
+                                                REGISTERS
+                                                    .get(destr.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!("Could not get 8-bit register {:?}", destr)
+                                                    .to_string(),
+                                            )?,
+                                            byte_ptr(labeled_mem_operand(label, size)?),
+                                        )?;
+                                    }
                                 }
                                 2 => {
                                     assembler.mov(
@@ -1797,27 +1831,6 @@ mod test_encoder {
         // Offset by one because "ret" instruction is one byte
         assert_eq!(res.entrypoint_address, 0x2001);
         assert_eq!(res.data_start_address, 0x1000);
-    }
-
-    #[test]
-    fn mov_from_mem() {
-        // mov al, BYTE PTR [rip + .LCharacter]
-        assert_encoding(
-            vec![Instruction::MOV {
-                destination: ValueOperand::Register {
-                    r: Register {
-                        name: "AL".to_string(),
-                        size: 1,
-                        part_of: registers::GPRegister::RAX,
-                    },
-                },
-                source: ValueOperand::Memory {
-                    label: ".Lcharacter".to_string(),
-                    size: 1,
-                },
-            }],
-            vec![160, 0, 16, 0, 0, 0, 0, 0, 0],
-        );
     }
 
     #[test]

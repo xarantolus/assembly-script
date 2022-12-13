@@ -1,6 +1,5 @@
 use serde::Serialize;
 use std::{cell::Cell, collections::HashMap, fmt};
-use wasm_bindgen::prelude::wasm_bindgen;
 
 use iced_x86::{code_asm::*, BlockEncoderOptions, Register};
 use lazy_static::lazy_static;
@@ -440,31 +439,16 @@ pub fn encode_file(
                             },
                             ValueOperand::Memory { label, size } => match destr.size.to_owned() {
                                 1 => {
-                                    if destr.name.eq_ignore_ascii_case("al") {
-                                        // Add special case so this doesn't use the `MOV AL, moffs8` opcode, which the interpreter doesn't support
-                                        assembler.add_instruction(iced_x86::Instruction::with2(
-                                            iced_x86::Code::Mov_rm8_r8,
-                                            Register::AL,
-                                            iced_x86::MemoryOperand::with_displ(
-                                                labeled_mem_operand(label, size)?,
-                                                32,
-                                            ),
-                                        )?)?;
-                                    } else {
-                                        assembler.mov(
-                                            gpr8::get_gpr8(
-                                                REGISTERS
-                                                    .get(destr.name.as_str())
-                                                    .unwrap()
-                                                    .to_owned(),
-                                            )
-                                            .ok_or(
-                                                format!("Could not get 8-bit register {:?}", destr)
-                                                    .to_string(),
-                                            )?,
-                                            byte_ptr(labeled_mem_operand(label, size)?),
-                                        )?;
-                                    }
+                                    assembler.mov(
+                                        gpr8::get_gpr8(
+                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 8-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                        byte_ptr(labeled_mem_operand(label, size)?),
+                                    )?;
                                 }
                                 2 => {
                                     assembler.mov(
@@ -1604,7 +1588,10 @@ pub fn encode_file(
                                             } => label.to_owned() == l.to_owned(),
                                             _ => false,
                                         })
-                                        .ok_or(format!("Could not find relative forward jump label {:?}", label))?;
+                                        .ok_or(format!(
+                                            "Could not find relative forward jump label {:?}",
+                                            label
+                                        ))?;
 
                                 // Insert this into the map
                                 let new_label = Cell::new(assembler.create_label());
@@ -1629,9 +1616,6 @@ pub fn encode_file(
                         }
                         JumpCondition::ZeroEqual => {
                             assembler.je(target_label.get())?;
-                        }
-                        _ => {
-                            strerror(format!("unsupported jump condition: {:?}", condition))?;
                         }
                     }
                 }
@@ -1688,9 +1672,6 @@ pub fn encode_file(
                 }
                 instructions::Instruction::CQO {} => {
                     assembler.cqo()?;
-                }
-                _ => {
-                    strerror(format!("unsupported instruction: {:?}", i).to_string())?;
                 }
             },
         }

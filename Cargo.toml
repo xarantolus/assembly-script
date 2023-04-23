@@ -1,5 +1,5 @@
 [package]
-name = "assembly-script"
+name = "x86-assembly-script"
 version = "0.1.0"
 authors = ["xarantolus <xarantolus@protonmail.com>"]
 edition = "2018"

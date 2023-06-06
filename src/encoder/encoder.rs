@@ -331,6 +331,83 @@ pub fn encode_file(
                                     strerror(format!("Invalid register size {:?}", r.size))?;
                                 }
                             },
+                            ValueOperand::DynamicMemory { register, size } => match size {
+                                1 => {
+                                    assembler.mov(
+                                        gpr8::get_gpr8(
+                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 8-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                        gpr8::get_gpr8(
+                                            REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 8-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                    )?;
+                                }
+                                2 => {
+                                    assembler.mov(
+                                        gpr16::get_gpr16(
+                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 16-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                        gpr16::get_gpr16(
+                                            REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 16-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                    )?;
+                                }
+                                4 => {
+                                    assembler.mov(
+                                        gpr32::get_gpr32(
+                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 32-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                        gpr32::get_gpr32(
+                                            REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 32-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                    )?;
+                                }
+                                8 => {
+                                    assembler.mov(
+                                        gpr64::get_gpr64(
+                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 64-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                        gpr64::get_gpr64(
+                                            REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                        )
+                                        .ok_or(
+                                            format!("Could not get 64-bit register {:?}", destr)
+                                                .to_string(),
+                                        )?,
+                                    )?;
+                                }
+                                _ => {
+                                    strerror(format!("Invalid register size {:?}", size))?;
+                                }
+                            }
                             ValueOperand::Immediate { i } => match destr.size.to_owned() {
                                 1 => {
                                     assembler.mov(
@@ -489,12 +566,6 @@ pub fn encode_file(
                                 _ => {
                                     strerror(format!("Invalid register size {:?}", destr.size))?;
                                 }
-                            },
-                            _ => {
-                                strerror(format!(
-                                    "mov source ({:?}) must be a register, memory or immediate operand",
-                                    src,
-                                ))?;
                             }
                         },
                         _ => {
@@ -1750,7 +1821,7 @@ mod test_encoder {
         parser::{
             input::{self, LineType},
             instructions::{Instruction, JumpCondition, JumpTarget, ValueOperand},
-            registers::{self, Register},
+            registers::{self, Register, GPRegister},
         },
     };
 
@@ -1828,6 +1899,30 @@ mod test_encoder {
                 source: ValueOperand::DirectMemory { i: 15 },
             }],
             vec![72, 161, 15, 0, 0, 0, 0, 0, 0, 0],
+        );
+    }
+
+    #[test]
+    fn mov_mem_reg() {
+        assert_encoding(
+            vec![Instruction::MOV {
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "RDI".to_string(),
+                        size: 8,
+                        part_of: GPRegister::RDI,
+                    }
+                },
+                source: ValueOperand::DynamicMemory {
+                    register: Register {
+                        name: "RDI".to_string(),
+                        size: 8,
+                        part_of: GPRegister::RDI,
+                    },
+                    size: 8
+                }
+            }],
+            vec![0x48, 0x8b, 0x3f],
         );
     }
 

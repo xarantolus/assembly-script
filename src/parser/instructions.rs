@@ -469,6 +469,30 @@ mod instruction_parse_test {
     }
 
     #[test]
+    fn mov_reg() {
+        assert_eq!(
+            parse_instruction("mov rdi, [rdi]"),
+            Ok(Instruction::MOV {
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "RDI".to_string(),
+                        size: 8,
+                        part_of: GPRegister::RDI,
+                    }
+                },
+                source: ValueOperand::DynamicMemory {
+                    register: Register {
+                        name: "RDI".to_string(),
+                        size: 8,
+                        part_of: GPRegister::RDI,
+                    },
+                    size: 8
+                }
+            })
+        );
+    }
+
+    #[test]
     fn mov_memory() {
         assert_eq!(
             parse_instruction("mov al, BYTE PTR [rip + .LCharacter]"),

@@ -342,7 +342,10 @@ pub fn encode_file(
                                                 .to_string(),
                                         )?,
                                         gpr8::get_gpr8(
-                                            REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                            REGISTERS
+                                                .get(register.name.as_str())
+                                                .unwrap()
+                                                .to_owned(),
                                         )
                                         .ok_or(
                                             format!("Could not get 8-bit register {:?}", destr)
@@ -360,7 +363,10 @@ pub fn encode_file(
                                                 .to_string(),
                                         )?,
                                         gpr16::get_gpr16(
-                                            REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                            REGISTERS
+                                                .get(register.name.as_str())
+                                                .unwrap()
+                                                .to_owned(),
                                         )
                                         .ok_or(
                                             format!("Could not get 16-bit register {:?}", destr)
@@ -378,7 +384,10 @@ pub fn encode_file(
                                                 .to_string(),
                                         )?,
                                         gpr32::get_gpr32(
-                                            REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                            REGISTERS
+                                                .get(register.name.as_str())
+                                                .unwrap()
+                                                .to_owned(),
                                         )
                                         .ok_or(
                                             format!("Could not get 32-bit register {:?}", destr)
@@ -396,7 +405,10 @@ pub fn encode_file(
                                                 .to_string(),
                                         )?,
                                         gpr64::get_gpr64(
-                                            REGISTERS.get(register.name.as_str()).unwrap().to_owned(),
+                                            REGISTERS
+                                                .get(register.name.as_str())
+                                                .unwrap()
+                                                .to_owned(),
                                         )
                                         .ok_or(
                                             format!("Could not get 64-bit register {:?}", destr)
@@ -407,7 +419,7 @@ pub fn encode_file(
                                 _ => {
                                     strerror(format!("Invalid register size {:?}", size))?;
                                 }
-                            }
+                            },
                             ValueOperand::Immediate { i } => match destr.size.to_owned() {
                                 1 => {
                                     assembler.mov(
@@ -566,7 +578,7 @@ pub fn encode_file(
                                 _ => {
                                     strerror(format!("Invalid register size {:?}", destr.size))?;
                                 }
-                            }
+                            },
                         },
                         _ => {
                             strerror(format!(
@@ -1821,7 +1833,7 @@ mod test_encoder {
         parser::{
             input::{self, LineType},
             instructions::{Instruction, JumpCondition, JumpTarget, ValueOperand},
-            registers::{self, Register, GPRegister},
+            registers::{self, GPRegister, Register},
         },
     };
 
@@ -1911,7 +1923,7 @@ mod test_encoder {
                         name: "RDI".to_string(),
                         size: 8,
                         part_of: GPRegister::RDI,
-                    }
+                    },
                 },
                 source: ValueOperand::DynamicMemory {
                     register: Register {
@@ -1919,8 +1931,8 @@ mod test_encoder {
                         size: 8,
                         part_of: GPRegister::RDI,
                     },
-                    size: 8
-                }
+                    size: 8,
+                },
             }],
             vec![0x48, 0x8b, 0x3f],
         );

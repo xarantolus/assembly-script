@@ -469,6 +469,35 @@ mod instruction_parse_test {
     }
 
     #[test]
+    fn commas() {
+        assert_eq!(
+            parse_instruction("cmp r11b, ','"),
+            Ok(Instruction::CMP {
+                src1: Register {
+                    name: "R11B".to_string(),
+                    size: 1,
+                    part_of: GPRegister::R11
+                },
+                src2: ValueOperand::Immediate { i: b',' as i64 }
+            })
+        );
+
+        assert_eq!(
+            parse_instruction("mov rdx, ','"),
+            Ok(Instruction::MOV {
+                destination: ValueOperand::Register {
+                    r: Register {
+                        name: "RDX".to_string(),
+                        size: 8,
+                        part_of: GPRegister::RDX
+                    }
+                },
+                source: ValueOperand::Immediate { i: b',' as i64 }
+            })
+        );
+    }
+
+    #[test]
     fn mov_reg() {
         assert_eq!(
             parse_instruction("mov rdi, [rdi]"),

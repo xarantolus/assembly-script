@@ -3,7 +3,7 @@ use phf::phf_map;
 #[derive(Debug, PartialEq, Clone)]
 pub struct Register {
     pub name: String,
-    pub size: i8,
+    pub size: u8,
     pub part_of: GPRegister,
 }
 
@@ -29,7 +29,7 @@ pub enum GPRegister {
 }
 
 // Register LUT
-const REGISTERS: phf::Map<&str, (i8, GPRegister)> = phf_map! {
+const REGISTERS: phf::Map<&str, (u8, GPRegister)> = phf_map! {
     // 64-Bit registers
     "RAX" => (8,GPRegister::RAX),
     "RBX" => (8,GPRegister::RBX),

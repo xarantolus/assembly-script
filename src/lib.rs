@@ -46,3 +46,28 @@ pub fn assemble(
 
     return serde_wasm_bindgen::to_value(&res).map_err(|e| format!("{}", e).to_string());
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_assemble() {
+        let input_file_content = r#"
+        .section .text
+        .globl _start
+        _start:
+            mov rax, [rax]
+        "#;
+
+        assert!(matches!(
+            assemble_raw(
+                input_file_content.to_string(),
+                0x1000,
+                0x2000,
+                "_start".to_string(),
+            ),
+            Ok(_)
+        ));
+    }
+}

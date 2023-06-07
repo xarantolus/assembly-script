@@ -522,7 +522,16 @@ fn parse_section(line: &str) -> Result<Section, String> {
     match line {
         ".data" => Ok(Section::Data),
         ".text" => Ok(Section::Text),
-        _ => Err(format!("invalid section start {}", line)),
+        _ => {
+            // See if it's .section and then parse the section name
+            let split: Vec<_> = line.split_whitespace().collect();
+
+            if split.len() == 2 && split[0] == ".section" {
+                parse_section(split[1])
+            } else {
+                Err(format!("Cannot parse section: {}", line))
+            }
+        }
     }
 }
 
@@ -568,7 +577,8 @@ fn is_ignored_line(line: &str) -> bool {
     return line.is_empty()
         || is_comment(line)
         || line == ".intel_syntax noprefix"
-        || line.starts_with(".global");
+        || line.starts_with(".global")
+        || line.starts_with(".globl");
 }
 
 #[cfg(test)]

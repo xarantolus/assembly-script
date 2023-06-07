@@ -242,7 +242,7 @@ pub fn parse_instruction(line: &str) -> Result<Instruction, String> {
             })
         }
         ("IDIV", 1) => {
-            let mem = parse_as_memory_operand(split[1])?;
+            let mem = parse_as_memory_operand(split[1], 0)?;
 
             Ok(Instruction::IDIV { source: mem })
         }
@@ -386,7 +386,7 @@ fn parse_mem_and_value(instruction: Vec<&str>) -> Result<(ValueOperand, ValueOpe
             instruction.len()
         );
     }
-    let mem_operand = parse_as_memory_operand(instruction[1])?;
+    let mem_operand = parse_as_memory_operand(instruction[1], 0)?;
     let other = parse_any_arg(instruction[2])?;
 
     return Ok((mem_operand, other));
@@ -410,7 +410,7 @@ fn parse_2_instruction_args(instruction: Vec<&str>) -> Result<(Register, ValueOp
                     }
                 }
                 _ => {
-                    let mem_operand = parse_as_memory_operand(instruction[2]);
+                    let mem_operand = parse_as_memory_operand(instruction[2], reg1.size);
                     match mem_operand {
                         Err(_) => Ok((
                             // TODO: Check if immediate is too large for destination
@@ -521,7 +521,7 @@ mod instruction_parse_test {
                         size: 8,
                         part_of: GPRegister::RDI,
                     },
-                    size: 0
+                    size: 8
                 }
             })
         );
@@ -942,7 +942,7 @@ mod instruction_parse_test {
                 },
                 source: ValueOperand::Memory {
                     label: ".LCharacter".to_string(),
-                    size: 0
+                    size: 8
                 }
             })
         );
@@ -1083,7 +1083,7 @@ const MEM_OPERAND_SIZE_MAP: phf::Map<&str, u8> = phf_map! {
     "QWORD" => 8,
 };
 
-fn parse_as_memory_operand(expr: &str) -> Result<ValueOperand, String> {
+fn parse_as_memory_operand(expr: &str, other_size: u8) -> Result<ValueOperand, String> {
     let parts: Vec<&str> = MEM_OPERAND_REGEX
         .captures_iter(expr)
         .map(|m| m.get(0).map_or("", |m| m.as_str()))
@@ -1115,13 +1115,13 @@ fn parse_as_memory_operand(expr: &str) -> Result<ValueOperand, String> {
             match Register::parse(label[0].to_string()) {
                 Ok(r) => Ok(ValueOperand::DynamicMemory {
                     register: r,
-                    size: 0,
+                    size: other_size,
                 }),
                 Err(_) => match u32::from_str_radix(label[0], 10) {
                     Ok(num) => Ok(ValueOperand::DirectMemory { i: num }),
                     Err(_) => Ok(ValueOperand::Memory {
                         label: label[0].to_string(),
-                        size: 0,
+                        size: other_size,
                     }),
                 },
             }
@@ -1178,7 +1178,7 @@ mod memory_operands {
     #[test]
     fn parse_mem_operands() {
         assert_eq!(
-            parse_as_memory_operand("[rax]"),
+            parse_as_memory_operand("[rax]", 0),
             Ok(ValueOperand::DynamicMemory {
                 register: Register {
                     name: "RAX".to_string(),
@@ -1189,14 +1189,14 @@ mod memory_operands {
             })
         );
         assert_eq!(
-            parse_as_memory_operand("BYTE PTR [rip + .LCharacter]"),
+            parse_as_memory_operand("BYTE PTR [rip + .LCharacter]", 0),
             Ok(ValueOperand::Memory {
                 label: ".LCharacter".to_string(),
                 size: 1
             })
         );
         assert_eq!(
-            parse_as_memory_operand("QWORD PTR [rip + .Ltmp64]"),
+            parse_as_memory_operand("QWORD PTR [rip + .Ltmp64]", 0),
             Ok(ValueOperand::Memory {
                 label: ".Ltmp64".to_string(),
                 size: 8
@@ -1206,7 +1206,7 @@ mod memory_operands {
 }
 
 fn parse_any_arg(expr: &str) -> Result<ValueOperand, String> {
-    let mem = parse_as_memory_operand(expr);
+    let mem = parse_as_memory_operand(expr, 0);
     if mem.is_ok() {
         return mem;
     }

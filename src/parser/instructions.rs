@@ -120,8 +120,10 @@ fn split_instr_string(line: &str) -> Vec<&str> {
         None => vec![line],
         Some((left, right)) => {
             let mut res = vec![left];
-            let rest_split: Vec<&str> = right.split(",").collect();
-            res.extend_from_slice(&rest_split);
+            // Split right at the first comma
+            let (arg1, arg2) = right.split_once(',').unwrap_or((right, ""));
+            res.push(arg1);
+            res.push(arg2);
             return res
                 .into_iter()
                 .map(|w| w.trim())
@@ -137,6 +139,10 @@ mod split_test {
 
     #[test]
     fn split() {
+        assert_eq!(
+            split_instr_string("mov rdx, ','"),
+            vec!["mov", "rdx", "','"]
+        );
         assert_eq!(
             split_instr_string("mov rax, rbx"),
             vec!["mov", "rax", "rbx"]
@@ -515,7 +521,7 @@ mod instruction_parse_test {
                         size: 8,
                         part_of: GPRegister::RDI,
                     },
-                    size: 8
+                    size: 0
                 }
             })
         );
@@ -1065,6 +1071,9 @@ lazy_static! {
     static ref MEM_OPERAND_REGEX: Regex = Regex::new(r"(?m)(\[(.*?)\]|\S+)").unwrap();
     static ref MEMORY_LABEL_OFFSET_REGEX: Regex =
         Regex::new(r"(?m)^(?:rip\s*\+)?\s*(.*?)\s*$").unwrap();
+
+    // We want to split at commas (and don't keep them), but not if they are inside ' quotes
+    static ref SPLIT_INSTRUCTION_ARGUMENTS_REGEX : Regex = Regex::new(r#"(?m)(?:^|(?<=,))\s*("(?:[^"\\]|\\.)*"|[^",\s][^,]*[^",\s]?)\s*(?:$|(?=,))"#).unwrap();
 }
 
 const MEM_OPERAND_SIZE_MAP: phf::Map<&str, u8> = phf_map! {

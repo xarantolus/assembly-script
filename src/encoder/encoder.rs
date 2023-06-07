@@ -332,48 +332,6 @@ pub fn encode_file(
                                 }
                             },
                             ValueOperand::DynamicMemory { register, size } => match size {
-                                1 => {
-                                    assembler.mov(
-                                        gpr8::get_gpr8(
-                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
-                                        )
-                                        .ok_or(
-                                            format!("Could not get 8-bit register {:?}", destr)
-                                                .to_string(),
-                                        )?,
-                                        gpr8::get_gpr8(
-                                            REGISTERS
-                                                .get(register.name.as_str())
-                                                .unwrap()
-                                                .to_owned(),
-                                        )
-                                        .ok_or(
-                                            format!("Could not get 8-bit register {:?}", destr)
-                                                .to_string(),
-                                        )?,
-                                    )?;
-                                }
-                                2 => {
-                                    assembler.mov(
-                                        gpr16::get_gpr16(
-                                            REGISTERS.get(destr.name.as_str()).unwrap().to_owned(),
-                                        )
-                                        .ok_or(
-                                            format!("Could not get 16-bit register {:?}", destr)
-                                                .to_string(),
-                                        )?,
-                                        gpr16::get_gpr16(
-                                            REGISTERS
-                                                .get(register.name.as_str())
-                                                .unwrap()
-                                                .to_owned(),
-                                        )
-                                        .ok_or(
-                                            format!("Could not get 16-bit register {:?}", destr)
-                                                .to_string(),
-                                        )?,
-                                    )?;
-                                }
                                 4 => {
                                     assembler.mov(
                                         gpr32::get_gpr32(
@@ -383,16 +341,21 @@ pub fn encode_file(
                                             format!("Could not get 32-bit register {:?}", destr)
                                                 .to_string(),
                                         )?,
-                                        gpr32::get_gpr32(
-                                            REGISTERS
-                                                .get(register.name.as_str())
-                                                .unwrap()
-                                                .to_owned(),
-                                        )
-                                        .ok_or(
-                                            format!("Could not get 32-bit register {:?}", destr)
+                                        dword_ptr(
+                                            gpr32::get_gpr32(
+                                                REGISTERS
+                                                    .get(register.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!(
+                                                    "Could not get 32-bit register {:?}",
+                                                    destr
+                                                )
                                                 .to_string(),
-                                        )?,
+                                            )?,
+                                        ),
                                     )?;
                                 }
                                 8 => {
@@ -404,16 +367,21 @@ pub fn encode_file(
                                             format!("Could not get 64-bit register {:?}", destr)
                                                 .to_string(),
                                         )?,
-                                        gpr64::get_gpr64(
-                                            REGISTERS
-                                                .get(register.name.as_str())
-                                                .unwrap()
-                                                .to_owned(),
-                                        )
-                                        .ok_or(
-                                            format!("Could not get 64-bit register {:?}", destr)
+                                        qword_ptr(
+                                            gpr64::get_gpr64(
+                                                REGISTERS
+                                                    .get(register.name.as_str())
+                                                    .unwrap()
+                                                    .to_owned(),
+                                            )
+                                            .ok_or(
+                                                format!(
+                                                    "Could not get 64-bit register {:?}",
+                                                    destr
+                                                )
                                                 .to_string(),
-                                        )?,
+                                            )?,
+                                        ),
                                     )?;
                                 }
                                 _ => {
